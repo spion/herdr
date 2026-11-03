@@ -479,6 +479,38 @@ impl TileLayout {
         true
     }
 
+    /// Move `pane` into a new stack on `side` of `target`'s stack and focus it.
+    /// Its old stack closes when it empties. Changes nothing and returns false
+    /// when either is missing, or when `pane` is alone in `target`'s stack.
+    pub fn split_out(&mut self, pane: PaneId, target: PaneId, side: NavDirection) -> bool {
+        if !self.contains(pane) {
+            return false;
+        }
+        let Some(anchor) = self
+            .stack_of(target)
+            .and_then(|stack| stack.panes.iter().copied().find(|id| *id != pane))
+        else {
+            return false;
+        };
+        // `anchor` stays in the layout, so `pane` is never its last pane.
+        self.close_pane(pane);
+        let Some(leaf) = find_leaf_mut(&mut self.root, anchor) else {
+            return false;
+        };
+        let direction = match side {
+            NavDirection::Left | NavDirection::Right => Direction::Horizontal,
+            NavDirection::Up | NavDirection::Down => Direction::Vertical,
+        };
+        split_leaf(leaf, direction, Node::pane(pane), 0.5);
+        if matches!(side, NavDirection::Left | NavDirection::Up) {
+            if let Node::Split { first, second, .. } = leaf {
+                std::mem::swap(first, second);
+            }
+        }
+        self.set_focus(pane);
+        true
+    }
+
     /// Show `pane` in its stack. When that stack holds focus, focus moves to
     /// `pane` too, so the focused pane stays shown.
     pub fn show(&mut self, pane: PaneId) {
@@ -1808,6 +1840,11 @@ mod stack_properties {
         Show {
             pane: Index,
         },
+        SplitOut {
+            pane: Index,
+            target: Index,
+            side: u8,
+        },
         Reorder {
             pane: Index,
             index: Index,
@@ -1832,6 +1869,8 @@ mod stack_properties {
             1 => Just(Op::CloseFocused),
             2 => any::<Index>().prop_map(|pane| Op::Focus { pane }),
             1 => any::<Index>().prop_map(|pane| Op::Show { pane }),
+            2 => (any::<Index>(), any::<Index>(), any::<u8>())
+                .prop_map(|(pane, target, side)| Op::SplitOut { pane, target, side }),
             1 => (any::<Index>(), any::<Index>()).prop_map(|(pane, index)| Op::Reorder { pane, index }),
             1 => (any::<Index>(), any::<Index>()).prop_map(|(first, second)| Op::Swap { first, second }),
         ]
@@ -1890,6 +1929,19 @@ mod stack_properties {
             }
             Op::Focus { pane: target } => layout.focus_pane(pane(target)),
             Op::Show { pane: target } => layout.show(pane(target)),
+            Op::SplitOut {
+                pane: moved,
+                target,
+                side,
+            } => {
+                let side = [
+                    NavDirection::Left,
+                    NavDirection::Right,
+                    NavDirection::Up,
+                    NavDirection::Down,
+                ][usize::from(*side % 4)];
+                layout.split_out(pane(moved), pane(target), side);
+            }
             Op::Reorder { pane: moved, index } => {
                 layout.move_tab(pane(moved), index.index(MAX_SLOT));
             }
@@ -1948,7 +2000,10 @@ mod stack_properties {
             for op in &ops {
                 let before: HashSet<PaneId> = layout.pane_ids().into_iter().collect();
                 apply(&mut layout, op);
-                if matches!(op, Op::MoveToStack { .. } | Op::Reorder { .. } | Op::Swap { .. }) {
+                if matches!(
+                    op,
+                    Op::MoveToStack { .. } | Op::Reorder { .. } | Op::Swap { .. } | Op::SplitOut { .. }
+                ) {
                     let after: HashSet<PaneId> = layout.pane_ids().into_iter().collect();
                     prop_assert_eq!(after, before);
                 }

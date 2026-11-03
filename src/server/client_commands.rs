@@ -266,6 +266,10 @@ mod tests {
             actual.remove("pane.create").as_deref(),
             Some("6753753a5e61c67716f19b015c48b59e1be619ac922c1aff393d55fa5b7c2dba")
         );
+        assert_eq!(
+            actual.remove("pane.split_tab").as_deref(),
+            Some("15bb5f52020ffb7e9e52cbe4f80ce15144a199c762af50b180ae9d15546d352a")
+        );
 
         assert_eq!(
             actual, expected,

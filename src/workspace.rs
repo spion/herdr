@@ -828,6 +828,37 @@ impl Workspace {
         )
     }
 
+    /// Open `argv` as a new tab in `pane_id`'s tile.
+    #[allow(clippy::too_many_arguments)]
+    pub fn add_tab_pane_argv(
+        &mut self,
+        pane_id: PaneId,
+        rows: u16,
+        cols: u16,
+        cwd: Option<PathBuf>,
+        argv: &[String],
+        extra_env: Vec<(String, String)>,
+        scrollback_limit_bytes: usize,
+        host_terminal_theme: crate::terminal_theme::TerminalTheme,
+        host_terminal_appearance: Option<crate::terminal_theme::HostAppearance>,
+        focus_new_pane: bool,
+    ) -> Option<std::io::Result<(usize, crate::workspace::tab::NewPane)>> {
+        self.split_pane_with_runtime(
+            pane_id,
+            NewPaneSite::Tab,
+            rows,
+            cols,
+            cwd,
+            scrollback_limit_bytes,
+            host_terminal_theme,
+            host_terminal_appearance,
+            crate::pane::PaneShellConfig::new("", crate::config::ShellModeConfig::NonLogin),
+            extra_env,
+            focus_new_pane,
+            Some(argv),
+        )
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn split_pane_with_runtime(
         &mut self,

@@ -32,6 +32,8 @@ pub(crate) struct DeliveryCache {
     /// Delivered terminal images without a placement, most recently visible first.
     offscreen: Vec<SurfaceGraphicsAssetKey>,
     pending: bool,
+    /// An image too large to deliver was already logged for this client.
+    reported_oversized: bool,
 }
 
 pub(crate) type SourceFiles =
@@ -748,6 +750,7 @@ pub(crate) fn collect_scene(
             .collect(),
         offscreen: offscreen.clone(),
         pending: false,
+        reported_oversized: delivered.reported_oversized,
     };
     let mut assets = Vec::new();
     let mut available = asset_data.into_iter().collect::<Vec<_>>();
@@ -761,6 +764,14 @@ pub(crate) fn collect_scene(
             usize::try_from(key.data_len).unwrap_or(usize::MAX),
         );
         if encoded_size > super::HEADLESS_GRAPHICS_TRANSACTION_BUDGET {
+            if !next.reported_oversized {
+                next.reported_oversized = true;
+                tracing::warn!(
+                    encoded_size,
+                    budget = super::HEADLESS_GRAPHICS_TRANSACTION_BUDGET,
+                    "image too large to deliver to the client; it will not be drawn"
+                );
+            }
             continue;
         }
         if payload_bytes.saturating_add(encoded_size) > super::HEADLESS_GRAPHICS_TRANSACTION_BUDGET

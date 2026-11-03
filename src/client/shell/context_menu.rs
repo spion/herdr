@@ -50,13 +50,37 @@ impl ClientContextMenuOverlay {
                 item("Rename", Action::Rename),
                 item("Close", Action::Close),
             ],
+            ClientContextMenuTarget::StackTab {
+                has_manual_label,
+                has_sibling_tabs,
+                ..
+            } => {
+                let mut items = vec![
+                    item("New tab", Action::NewStackTab),
+                    item("Rename", Action::RenamePane),
+                ];
+                if *has_manual_label {
+                    items.push(item("Clear name", Action::ClearPaneName));
+                }
+                if *has_sibling_tabs {
+                    items.extend([
+                        item("Split right", Action::SplitTabRight),
+                        item("Split down", Action::SplitTabDown),
+                    ]);
+                }
+                items.push(item("Close", Action::ClosePane));
+                items
+            }
             ClientContextMenuTarget::Pane {
                 source_pane_id,
                 has_manual_label,
                 right_click_passthrough,
                 ..
             } => {
-                let mut items = vec![item("Rename pane", Action::RenamePane)];
+                let mut items = vec![
+                    item("New tab here", Action::NewStackTab),
+                    item("Rename pane", Action::RenamePane),
+                ];
                 if *has_manual_label {
                     items.push(item("Clear pane name", Action::ClearPaneName));
                 }
@@ -167,6 +191,28 @@ impl ClientShellState {
         }));
     }
 
+    pub(super) fn open_stack_tab_context_menu(&mut self, pane_id: String, x: u16, y: u16) {
+        let Some(snapshot) = self.snapshot.as_deref() else {
+            return;
+        };
+        let tabs = render::stack_strip::tabs_of_tile(snapshot, &pane_id);
+        let Some(pane) = tabs.iter().find(|pane| pane.pane_id == pane_id) else {
+            return;
+        };
+        let target = ClientContextMenuTarget::StackTab {
+            workspace_id: pane.workspace_id.clone(),
+            has_manual_label: pane.label.is_some(),
+            has_sibling_tabs: tabs.len() > 1,
+            pane_id,
+        };
+        self.overlay = Some(ClientShellOverlay::ContextMenu(ClientContextMenuOverlay {
+            target,
+            x,
+            y,
+            highlighted: 0,
+        }));
+    }
+
     pub(super) fn move_context_menu_selection(&mut self, delta: isize) {
         let Some(ClientShellOverlay::ContextMenu(menu)) = self.overlay.as_mut() else {
             return;
@@ -212,6 +258,18 @@ impl ClientShellState {
                 workspace_id,
                 source_pane_id,
                 right_click_passthrough,
+                action,
+                outcome,
+            ),
+            ClientContextMenuTarget::StackTab {
+                pane_id,
+                workspace_id,
+                ..
+            } => self.activate_pane_context_action(
+                pane_id,
+                workspace_id,
+                None,
+                false,
                 action,
                 outcome,
             ),
@@ -365,8 +423,9 @@ impl ClientShellState {
         outcome: &mut ClientShellInput,
     ) {
         use crate::api::schema::{
-            Method, PaneInputSetParams, PaneRenameParams, PaneRightClickTarget, PaneSplitParams,
-            PaneSwapParams, PaneTarget, PaneZoomMode, PaneZoomParams, SplitDirection,
+            Method, PaneAddTabParams, PaneDirection, PaneInputSetParams, PaneRenameParams,
+            PaneRightClickTarget, PaneSplitParams, PaneSplitTabParams, PaneSwapParams, PaneTarget,
+            PaneZoomMode, PaneZoomParams, SplitDirection,
         };
 
         match action {
@@ -448,6 +507,28 @@ impl ClientShellState {
                 outcome,
             ),
             ClientContextMenuAction::ClosePane => self.request_pane_close(pane_id, outcome),
+            ClientContextMenuAction::NewStackTab => self.push_endpoint_method(
+                Method::PaneAddTab(PaneAddTabParams {
+                    pane_id,
+                    cwd: None,
+                    focus: true,
+                }),
+                outcome,
+            ),
+            ClientContextMenuAction::SplitTabRight | ClientContextMenuAction::SplitTabDown => {
+                self.push_endpoint_method(
+                    Method::PaneSplitTab(PaneSplitTabParams {
+                        pane_id,
+                        target_pane_id: None,
+                        side: if action == ClientContextMenuAction::SplitTabRight {
+                            PaneDirection::Right
+                        } else {
+                            PaneDirection::Down
+                        },
+                    }),
+                    outcome,
+                );
+            }
             _ => {}
         }
     }

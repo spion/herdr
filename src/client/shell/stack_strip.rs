@@ -9,8 +9,14 @@
 //! into the chrome buffer and its cells are copied back after the blit. Only
 //! the cells of tab entries and buttons are copied, so the server's border
 //! stays visible between them.
+//!
+//! A dragged tab lands on a strip at the gap under the mouse, on the middle of
+//! a tile at the end of its strip, and on the outer quarter of a tile in a new
+//! tile on that side. The drop target is marked the same way as the strip, so
+//! marks are lines rather than a wash over the pane's content.
 
 use super::*;
+use crate::api::schema::{Method, PaneDirection, PaneMoveTabParams, PaneSplitTabParams};
 use crate::protocol::{CellData, ClientShellPane};
 
 const MAX_LABEL_WIDTH: usize = 24;
@@ -24,6 +30,8 @@ pub(in crate::client::shell) struct StackStrips {
     pub(in crate::client::shell) tabs: Vec<(Rect, String)>,
     /// `+` buttons, each with a pane of the tile it adds to.
     pub(in crate::client::shell) new_tabs: Vec<(Rect, String)>,
+    /// One-row pieces of the drop marker.
+    drop_marks: Vec<Rect>,
 }
 
 impl StackStrips {
@@ -32,6 +40,7 @@ impl StackStrips {
             .iter()
             .chain(&self.new_tabs)
             .map(|(rect, _)| *rect)
+            .chain(self.drop_marks.iter().copied())
     }
 
     /// Copy the drawn cells out of `frame` before the pane surface covers them.
@@ -62,6 +71,7 @@ pub(in crate::client::shell) fn render_stack_strips(
     panes: &[PaneHit],
     snapshot: &ClientShellSnapshot,
     config: &ClientShellConfig,
+    drop: Option<&StackTabDrop>,
 ) -> StackStrips {
     let mut strips = StackStrips::default();
     for hit in panes.iter().filter(|hit| !hit.popup) {
@@ -76,14 +86,10 @@ pub(in crate::client::shell) fn render_stack_strips(
         else {
             continue;
         };
-        let Some(stack_id) = shown.stack_id.as_deref() else {
+        let tabs = tabs_of_tile(snapshot, &hit.pane_id);
+        if tabs.is_empty() {
             continue;
-        };
-        let tabs: Vec<&ClientShellPane> = snapshot
-            .panes
-            .iter()
-            .filter(|pane| pane.stack_id.as_deref() == Some(stack_id))
-            .collect();
+        }
         let row = Rect::new(hit.rect.x + 1, hit.rect.y, hit.rect.width - 2, 1);
         if tabs.len() > 1 {
             render_strip(
@@ -101,7 +107,197 @@ pub(in crate::client::shell) fn render_stack_strips(
             strips.new_tabs.push((rect, shown.pane_id.clone()));
         }
     }
+    if let Some(drop) = drop {
+        strips.drop_marks = drop_marks(drop, panes, snapshot, &strips.tabs);
+        let accent = Style::default().bg(config.palette.accent);
+        for mark in &strips.drop_marks {
+            buffer.set_style(*mark, accent);
+        }
+    }
     strips
+}
+
+/// The panes of the tile holding `pane_id`, in tab order. Empty when the
+/// server does not report tiles.
+pub(in crate::client::shell) fn tabs_of_tile<'a>(
+    snapshot: &'a ClientShellSnapshot,
+    pane_id: &str,
+) -> Vec<&'a ClientShellPane> {
+    let stack_id = snapshot
+        .panes
+        .iter()
+        .find(|pane| pane.pane_id == pane_id)
+        .and_then(|pane| pane.stack_id.as_deref());
+    snapshot
+        .panes
+        .iter()
+        .filter(|pane| stack_id.is_some() && pane.stack_id.as_deref() == stack_id)
+        .collect()
+}
+
+pub(in crate::client::shell) fn drop_at(
+    stack_tabs: &[(Rect, String)],
+    panes: &[PaneHit],
+    snapshot: &ClientShellSnapshot,
+    dragged: &str,
+    point: (u16, u16),
+) -> Option<StackTabDrop> {
+    if let Some((rect, pane_id)) = stack_tabs.iter().find(|(rect, _)| contains(*rect, point)) {
+        let tabs = tabs_of_tile(snapshot, pane_id);
+        let position = tabs.iter().position(|tab| tab.pane_id == *pane_id)?;
+        let past_middle = point.0 >= rect.x + rect.width / 2;
+        return Some(StackTabDrop::Tile {
+            pane_id: pane_id.clone(),
+            index: position + usize::from(past_middle),
+        });
+    }
+    let hit = panes
+        .iter()
+        .find(|hit| !hit.popup && contains(hit.rect, point))?;
+    let tabs = tabs_of_tile(snapshot, &hit.pane_id);
+    if tabs.iter().all(|tab| tab.pane_id == dragged) {
+        return None;
+    }
+    let pane_id = hit.pane_id.clone();
+    match edge_side(hit.rect, point).filter(|_| point.1 != hit.rect.y) {
+        Some(side) => Some(StackTabDrop::Edge { pane_id, side }),
+        None => Some(StackTabDrop::Tile {
+            pane_id,
+            index: tabs.len(),
+        }),
+    }
+}
+
+/// The side of `rect` whose outer quarter holds `point`, the nearest one in a
+/// corner.
+fn edge_side(rect: Rect, (x, y): (u16, u16)) -> Option<PaneDirection> {
+    let fraction = |distance: u16, size: u16| f32::from(distance) / f32::from(size.max(1));
+    [
+        (PaneDirection::Left, fraction(x - rect.x, rect.width)),
+        (
+            PaneDirection::Right,
+            fraction(rect.right() - 1 - x, rect.width),
+        ),
+        (PaneDirection::Up, fraction(y - rect.y, rect.height)),
+        (
+            PaneDirection::Down,
+            fraction(rect.bottom() - 1 - y, rect.height),
+        ),
+    ]
+    .into_iter()
+    .filter(|(_, fraction)| *fraction < 0.25)
+    .min_by(|a, b| a.1.total_cmp(&b.1))
+    .map(|(side, _)| side)
+}
+
+/// The request that carries out `drop`, or None when it would change nothing.
+pub(in crate::client::shell) fn drop_request(
+    snapshot: &ClientShellSnapshot,
+    dragged: String,
+    drop: StackTabDrop,
+) -> Option<Method> {
+    match drop {
+        StackTabDrop::Edge { pane_id, side } => Some(Method::PaneSplitTab(PaneSplitTabParams {
+            pane_id: dragged,
+            target_pane_id: Some(pane_id),
+            side,
+        })),
+        StackTabDrop::Tile { pane_id, index } => {
+            let from = tabs_of_tile(snapshot, &pane_id)
+                .iter()
+                .position(|tab| tab.pane_id == dragged);
+            // `index` counts the dragged tab, which leaves its slot first.
+            let index = match from {
+                Some(from) if from == index || from + 1 == index => return None,
+                Some(from) if from < index => index - 1,
+                _ => index,
+            };
+            Some(Method::PaneMoveTab(PaneMoveTabParams {
+                pane_id: dragged,
+                target_pane_id: Some(pane_id),
+                index,
+            }))
+        }
+    }
+}
+
+fn drop_marks(
+    drop: &StackTabDrop,
+    panes: &[PaneHit],
+    snapshot: &ClientShellSnapshot,
+    entries: &[(Rect, String)],
+) -> Vec<Rect> {
+    let tile = |pane_id: &str| {
+        panes
+            .iter()
+            .find(|hit| hit.pane_id == pane_id)
+            .map(|hit| hit.rect)
+    };
+    match drop {
+        StackTabDrop::Edge { pane_id, side } => tile(pane_id)
+            .map(|rect| outline(half_toward(rect, *side)))
+            .unwrap_or_default(),
+        StackTabDrop::Tile { pane_id, index } => {
+            let tabs = tabs_of_tile(snapshot, pane_id);
+            let entry = |position: usize| {
+                let tab = tabs.get(position)?;
+                let (rect, _) = entries.iter().find(|(_, id)| *id == tab.pane_id)?;
+                Some(*rect)
+            };
+            let gap = match index.checked_sub(1).and_then(entry) {
+                Some(before) => Some(before.right()),
+                None => entry(0).map(|first| first.x.saturating_sub(1)),
+            };
+            match (gap, entry(0)) {
+                (Some(x), Some(first)) => vec![Rect::new(x, first.y, 1, 1)],
+                _ => tile(pane_id).map(outline).unwrap_or_default(),
+            }
+        }
+    }
+}
+
+fn half_toward(rect: Rect, side: PaneDirection) -> Rect {
+    let (half_width, half_height) = (rect.width / 2, rect.height / 2);
+    match side {
+        PaneDirection::Left => Rect {
+            width: half_width,
+            ..rect
+        },
+        PaneDirection::Right => Rect {
+            x: rect.right() - half_width,
+            width: half_width,
+            ..rect
+        },
+        PaneDirection::Up => Rect {
+            height: half_height,
+            ..rect
+        },
+        PaneDirection::Down => Rect {
+            y: rect.bottom() - half_height,
+            height: half_height,
+            ..rect
+        },
+    }
+}
+
+/// The edge of `rect`, as one-row pieces.
+fn outline(rect: Rect) -> Vec<Rect> {
+    if rect.is_empty() {
+        return Vec::new();
+    }
+    let mut pieces = vec![Rect { height: 1, ..rect }];
+    for y in rect.y + 1..rect.bottom().saturating_sub(1) {
+        pieces.push(Rect::new(rect.x, y, 1, 1));
+        pieces.push(Rect::new(rect.right() - 1, y, 1, 1));
+    }
+    if rect.height > 1 {
+        pieces.push(Rect {
+            y: rect.bottom() - 1,
+            height: 1,
+            ..rect
+        });
+    }
+    pieces
 }
 
 fn render_strip(

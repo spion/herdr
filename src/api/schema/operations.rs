@@ -184,6 +184,7 @@ mod tests {
             "pane.add_tab",
             "pane.move_tab",
             "pane.create",
+            "pane.split_tab",
             "pane.swap",
             "pane.move",
             "pane.zoom",

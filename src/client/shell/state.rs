@@ -188,6 +188,25 @@ pub(super) struct ClientTabPress {
     pub(super) start_row: u16,
 }
 
+/// A press on a tile tab, which becomes a drag once the mouse moves.
+pub(super) struct ClientStackTabPress {
+    pub(super) pane_id: String,
+    pub(super) start_column: u16,
+    pub(super) start_row: u16,
+}
+
+/// Where a dragged tile tab lands.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum StackTabDrop {
+    /// Into the tile showing `pane_id`, before the tab now at `index`.
+    Tile { pane_id: String, index: usize },
+    /// Into a new tile on `side` of the tile showing `pane_id`.
+    Edge {
+        pane_id: String,
+        side: crate::api::schema::PaneDirection,
+    },
+}
+
 pub(super) enum ClientChromeDrag {
     SidebarWidth,
     SidebarSection,
@@ -213,6 +232,10 @@ pub(super) enum ClientChromeDrag {
         tab_id: String,
         workspace_id: String,
         insert_index: Option<usize>,
+    },
+    StackTab {
+        pane_id: String,
+        drop: Option<StackTabDrop>,
     },
     Workspace {
         source_workspace_id: String,
@@ -527,6 +550,9 @@ pub(super) enum ClientContextMenuAction {
     Zoom,
     ToggleRightClickPassthrough,
     ClosePane,
+    NewStackTab,
+    SplitTabRight,
+    SplitTabDown,
 }
 
 #[derive(Debug)]
@@ -549,6 +575,12 @@ pub(super) enum ClientContextMenuTarget {
         source_pane_id: Option<String>,
         has_manual_label: bool,
         right_click_passthrough: bool,
+    },
+    StackTab {
+        pane_id: String,
+        workspace_id: String,
+        has_manual_label: bool,
+        has_sibling_tabs: bool,
     },
 }
 
@@ -882,6 +914,7 @@ pub(crate) struct ClientShellState {
     pub(super) chrome_drag: Option<ClientChromeDrag>,
     pub(super) workspace_press: Option<ClientWorkspacePress>,
     pub(super) tab_press: Option<ClientTabPress>,
+    pub(super) stack_tab_press: Option<ClientStackTabPress>,
     pub(super) collapsed_groups: HashSet<String>,
     pub(super) remote_collapsed_groups: HashMap<ClientEndpointId, HashSet<String>>,
     pub(super) workspace_scroll: usize,
@@ -1056,6 +1089,7 @@ impl ClientShellState {
             chrome_drag: None,
             workspace_press: None,
             tab_press: None,
+            stack_tab_press: None,
             collapsed_groups: preferences.collapsed_groups.into_iter().collect(),
             remote_collapsed_groups,
             workspace_scroll: 0,
@@ -1247,6 +1281,7 @@ impl ClientShellState {
         self.chrome_drag = None;
         self.workspace_press = None;
         self.tab_press = None;
+        self.stack_tab_press = None;
         self.workspace_scroll = 0;
         self.agent_scroll = 0;
         self.tab_scroll = 0;

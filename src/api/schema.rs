@@ -148,6 +148,7 @@ operations::define_operations! {
     PaneAddTab(PaneAddTabParams) => "pane.add_tab", true, true;
     PaneMoveTab(PaneMoveTabParams) => "pane.move_tab", true, true;
     PaneCreate(PaneCreateParams) => "pane.create", true, true;
+    PaneSplitTab(PaneSplitTabParams) => "pane.split_tab", true, true;
 }
 
 #[cfg(test)]

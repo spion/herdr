@@ -12,9 +12,9 @@ use crate::api::schema::{
     PaneReleaseAgentParams, PaneRenameParams, PaneReportAgentParams, PaneReportAgentSessionParams,
     PaneReportMetadataParams, PaneResizeParams, PaneResizeReason, PaneResizeResult,
     PaneScrollParams, PaneSelectionReadParams, PaneSendInputParams, PaneSendKeysParams,
-    PaneSendTextParams, PaneSplitParams, PaneSwapParams, PaneSwapReason, PaneSwapResult,
-    PaneTarget, PaneTextPoint, PaneTextRange, PaneZoomMode, PaneZoomParams, PaneZoomReason,
-    PaneZoomResult, ResponseResult,
+    PaneSendTextParams, PaneSplitParams, PaneSplitTabParams, PaneSwapParams, PaneSwapReason,
+    PaneSwapResult, PaneTarget, PaneTextPoint, PaneTextRange, PaneZoomMode, PaneZoomParams,
+    PaneZoomReason, PaneZoomResult, ResponseResult,
 };
 use crate::app::actions::{PaneZoomCommand, PaneZoomNoopReason};
 use crate::app::App;
@@ -287,6 +287,46 @@ impl App {
             self.state
                 .record_pane_focus_change(previous_focus, ws_idx, pane_id);
         }
+        self.schedule_session_save();
+        self.emit_layout_updated_event(ws_idx, tab_idx);
+        encode_success(id, ResponseResult::Ok {})
+    }
+
+    pub(super) fn handle_pane_split_tab(
+        &mut self,
+        id: String,
+        params: PaneSplitTabParams,
+    ) -> String {
+        let Some((ws_idx, pane_id)) = self.parse_pane_id(&params.pane_id) else {
+            return pane_not_found(id, &params.pane_id);
+        };
+        let target_pane_id = match params.target_pane_id.as_deref() {
+            None => pane_id,
+            Some(target) => match self.parse_pane_id(target) {
+                Some((target_ws_idx, target_pane_id)) if target_ws_idx == ws_idx => target_pane_id,
+                _ => return pane_not_found(id, target),
+            },
+        };
+        let ws = &self.state.workspaces[ws_idx];
+        let Some(tab_idx) = ws.find_tab_index_for_pane(pane_id) else {
+            return pane_not_found(id, &params.pane_id);
+        };
+        if ws.find_tab_index_for_pane(target_pane_id) != Some(tab_idx) {
+            return encode_error(
+                id,
+                "invalid_pane_split_tab",
+                "target pane is in another tab",
+            );
+        }
+        let previous_focus = self.state.current_pane_focus_target();
+        let moved = self.state.workspaces[ws_idx].tabs[tab_idx]
+            .layout
+            .split_out(pane_id, target_pane_id, params.side.into());
+        if !moved {
+            return encode_error(id, "invalid_pane_split_tab", "tile has no other tab");
+        }
+        self.state
+            .record_pane_focus_change(previous_focus, ws_idx, pane_id);
         self.schedule_session_save();
         self.emit_layout_updated_event(ws_idx, tab_idx);
         encode_success(id, ResponseResult::Ok {})
@@ -810,11 +850,15 @@ impl App {
             return encode_error(id, "pane_layout_unavailable", "pane layout unavailable");
         };
         let area = self.state.view.terminal_area;
+        let shown = tab
+            .layout
+            .stack_of(pane_id)
+            .map(crate::layout::Stack::active);
         let Some(info) = tab
             .layout
             .panes(area)
             .into_iter()
-            .find(|info| info.id == pane_id)
+            .find(|info| Some(info.id) == shown)
         else {
             return pane_not_found(
                 id,
@@ -2297,8 +2341,9 @@ impl App {
         direction: PaneDirection,
     ) -> Option<PaneId> {
         let tab = self.state.workspaces.get(ws_idx)?.tabs.get(tab_idx)?;
+        let shown = tab.layout.stack_of(source_pane_id)?.active();
         let panes = tab.layout.panes(self.state.view.terminal_area);
-        let source = panes.iter().find(|pane| pane.id == source_pane_id)?;
+        let source = panes.iter().find(|pane| pane.id == shown)?;
         find_in_direction(source, direction.into(), &panes)
     }
 
@@ -3363,6 +3408,65 @@ mod tests {
         );
 
         assert_eq!(metadata_error_code(&response), "pane_not_found");
+    }
+
+    #[test]
+    fn api_pane_split_tab_moves_a_tab_into_a_new_tile_on_that_side() {
+        let (mut app, _) = app_with_test_workspace();
+        let agent = app.state.workspaces[0].tabs[0].root_pane;
+        let logs = app.state.workspaces[0].test_split(ratatui::layout::Direction::Horizontal);
+        let layout = &mut app.state.workspaces[0].tabs[0].layout;
+        let stack = layout.stack_of(agent).unwrap().id();
+        layout.move_to_stack(logs, stack, None, false);
+        let logs_public = app.public_pane_id(0, logs).unwrap();
+
+        let response = app.handle_pane_split_tab(
+            "req".into(),
+            PaneSplitTabParams {
+                pane_id: logs_public,
+                target_pane_id: None,
+                side: PaneDirection::Left,
+            },
+        );
+
+        let success: SuccessResponse = serde_json::from_str(&response).unwrap();
+        assert!(matches!(success.result, ResponseResult::Ok {}));
+        let layout = &app.state.workspaces[0].tabs[0].layout;
+        assert_eq!(layout.tile_count(), 2);
+        assert_eq!(layout.focused(), logs);
+        let area = ratatui::layout::Rect::new(0, 0, 100, 20);
+        let shown = layout.panes(area);
+        assert_eq!(shown[0].id, logs, "the left side comes first");
+        assert_eq!(shown[1].id, agent);
+
+        let response = app.handle_pane_split_tab(
+            "req".into(),
+            PaneSplitTabParams {
+                pane_id: app.public_pane_id(0, logs).unwrap(),
+                target_pane_id: None,
+                side: PaneDirection::Right,
+            },
+        );
+        let error: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(error["error"]["code"], "invalid_pane_split_tab");
+    }
+
+    /// Business rule: scripts and agents keep working from a background tab, so
+    /// a hidden pane answers layout queries as the tile holding it.
+    #[test]
+    fn hidden_tabs_answer_layout_queries_as_their_tile() {
+        let (mut app, _) = app_with_test_workspace();
+        let agent = app.state.workspaces[0].tabs[0].root_pane;
+        let logs = app.state.workspaces[0].test_split(ratatui::layout::Direction::Horizontal);
+        let layout = &mut app.state.workspaces[0].tabs[0].layout;
+        let stack = layout.stack_of(logs).unwrap().id();
+        let hidden = layout.add_tab(stack, None, false).unwrap();
+        app.state.view.terminal_area = ratatui::layout::Rect::new(0, 0, 100, 20);
+
+        assert_eq!(
+            app.directional_pane_target(0, 0, hidden, PaneDirection::Left),
+            Some(agent)
+        );
     }
 
     #[test]

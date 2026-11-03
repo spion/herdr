@@ -63,6 +63,16 @@ crate::cli::projection::cli_params! {
     }
 }
 
+/// Move a tab into a new tile on `side` of the tile holding `target_pane_id`,
+/// or of its own tile when that is omitted, and focus it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct PaneSplitTabParams {
+    pub pane_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_pane_id: Option<String>,
+    pub side: PaneDirection,
+}
+
 crate::cli::projection::cli_params! {
     /// Open a shell pane beside `target_pane_id` without covering it: as a tab
     /// in the neighbouring tile focused last, else in the nearest tile toward
@@ -240,12 +250,22 @@ pub struct LayoutDescription {
     pub root: LayoutNode,
 }
 
+fn is_first_tab(active_tab: &usize) -> bool {
+    *active_tab == 0
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum LayoutNode {
     Pane {
         #[serde(flatten)]
         pane: LayoutPane,
+        /// The tile's other tabs, in order after `pane`.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        tabs: Vec<LayoutPane>,
+        /// The tab the tile shows: 0 for `pane`, then `tabs` in order.
+        #[serde(default, skip_serializing_if = "is_first_tab")]
+        active_tab: usize,
     },
     Split {
         direction: SplitDirection,

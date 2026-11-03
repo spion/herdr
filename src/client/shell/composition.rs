@@ -343,6 +343,10 @@ impl ClientShellState {
             &self.hits.panes,
             snapshot,
             &self.config,
+            match &self.chrome_drag {
+                Some(ClientChromeDrag::StackTab { drop, .. }) => drop.as_ref(),
+                _ => None,
+            },
         );
         let mut frame = FrameData::from_ratatui_buffer_with_hyperlinks(&buffer, None, &[]);
         let mode_bar_cells = mode_bar.map(|bar| {

@@ -88,6 +88,98 @@ fn tile_strip_lists_its_tabs_and_routes_clicks_to_the_pane_api() {
     ));
 }
 
+fn mouse(
+    state: &mut ClientShellState,
+    kind: MouseEventKind,
+    point: (u16, u16),
+) -> ClientShellInput {
+    state.handle_raw_events(vec![RawInputEvent::Mouse(crossterm::event::MouseEvent {
+        kind,
+        column: point.0,
+        row: point.1,
+        modifiers: KeyModifiers::empty(),
+    })])
+}
+
+/// Drags the second tab of a stacked tile to `drop` and returns the request it
+/// sent on release, after the marker for that drop was drawn.
+fn drag_logs_tab_to(drop: impl Fn(&ClientShellState) -> (u16, u16)) -> crate::api::schema::Method {
+    let (snapshot, surface) = stacked_tile();
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(snapshot));
+    state.set_pane_surface(surface);
+    state.compose(106, 20).expect("composed frame");
+
+    let logs = state.hits.stack_tabs[1].0;
+    click(&mut state, logs);
+    let target = drop(&state);
+    mouse(&mut state, MouseEventKind::Drag(MouseButton::Left), target);
+    assert!(state.compose(106, 20).is_some(), "the drop marker renders");
+    let released = mouse(&mut state, MouseEventKind::Up(MouseButton::Left), target);
+    let [ClientShellAction::Endpoint { request, .. }] = &released.actions[..] else {
+        panic!("expected one endpoint action: {:?}", released.actions);
+    };
+    request.method.clone()
+}
+
+#[test]
+fn dragging_a_tab_onto_its_strip_reorders_it() {
+    let method = drag_logs_tab_to(|state| {
+        let agent = state.hits.stack_tabs[0].0;
+        (agent.x, agent.y)
+    });
+    assert!(matches!(
+        method,
+        crate::api::schema::Method::PaneMoveTab(params)
+            if params.pane_id == "pane_2" && params.index == 0
+    ));
+}
+
+#[test]
+fn dragging_a_tab_onto_a_tile_edge_splits_it_out() {
+    let method = drag_logs_tab_to(|state| {
+        let tile = state.hits.panes[0].rect;
+        (tile.right() - 1, tile.y + tile.height / 2)
+    });
+    assert!(matches!(
+        method,
+        crate::api::schema::Method::PaneSplitTab(params)
+            if params.pane_id == "pane_2"
+                && params.side == crate::api::schema::PaneDirection::Right
+    ));
+}
+
+#[test]
+fn only_a_tab_with_siblings_offers_to_split_out() {
+    let (mut snapshot, surface) = stacked_tile();
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(snapshot.clone()));
+    state.set_pane_surface(surface);
+    state.compose(106, 20).expect("composed frame");
+
+    let labels = |state: &ClientShellState| {
+        let Some(ClientShellOverlay::ContextMenu(menu)) = state.overlay.as_ref() else {
+            panic!("expected a context menu");
+        };
+        menu.items()
+            .iter()
+            .map(|item| item.label)
+            .collect::<Vec<_>>()
+    };
+    let logs = state.hits.stack_tabs[1].0;
+    mouse(
+        &mut state,
+        MouseEventKind::Down(MouseButton::Right),
+        (logs.x + 1, logs.y),
+    );
+    assert!(labels(&state).contains(&"Split right"));
+
+    snapshot.panes.truncate(1);
+    state.set_snapshot(Box::new(snapshot));
+    state.open_stack_tab_context_menu("pane_1".into(), 0, 0);
+    assert!(!labels(&state).contains(&"Split right"));
+}
+
 #[test]
 fn single_tab_tiles_and_old_servers_show_no_strip() {
     let (mut snapshot, surface) = stacked_tile();
