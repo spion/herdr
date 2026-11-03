@@ -1209,6 +1209,9 @@ impl App {
                 return self.handle_pane_send_input(request.id, params);
             }
             Method::PaneClose(target) => return self.handle_pane_close(request.id, target),
+            Method::PaneAddTab(params) => return self.handle_pane_add_tab(request.id, params),
+            Method::PaneMoveTab(params) => return self.handle_pane_move_tab(request.id, params),
+            Method::PaneCreate(params) => return self.handle_pane_create(request.id, params),
             Method::PopupClose(_) => {
                 return if self.close_popup_pane() {
                     responses::encode_success(request.id, ResponseResult::Ok {})

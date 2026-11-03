@@ -90,6 +90,8 @@ pub(super) struct ShellHitMap {
     pub(super) workspace_scroll_metrics: Option<crate::pane::ScrollMetrics>,
     pub(super) workspace_max_scroll: usize,
     pub(super) tabs: Vec<(Rect, String)>,
+    pub(super) stack_tabs: Vec<(Rect, String)>,
+    pub(super) new_stack_tabs: Vec<(Rect, String)>,
     pub(super) panes: Vec<PaneHit>,
     pub(super) popup: Option<PaneHit>,
     pub(super) pane_splits: Vec<PaneSplitHit>,

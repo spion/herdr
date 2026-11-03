@@ -163,16 +163,22 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # next_agent = ""         # optional, unset by default
 # focus_agent = ""        # optional indexed binding, e.g. "prefix+alt+1..9"
 # remote_image_paste = "ctrl+v" # only active in herdr --remote; empty disables raw-key image paste
-# new_tab = "prefix+c"
-# rename_tab = "prefix+shift+t"
-# previous_tab = "prefix+p"
-# next_tab = "prefix+n"
+# new_tab = ""            # workspace tabs; unset by default
+# rename_tab = ""
+# previous_tab = ""
+# next_tab = ""
 # move_tab_previous = ""   # optional, e.g. "alt+shift+left" moves the tab toward the front
 # move_tab_next = ""       # optional, e.g. "alt+shift+right" moves the tab toward the back
-# switch_tab = "prefix+1..9"
+# switch_tab = ""          # optional indexed binding
 # switch_workspace = ""   # optional indexed binding, e.g. "prefix+shift+1..9"
-# close_tab = "prefix+shift+x"
-# rename_pane = "prefix+shift+p"
+# close_tab = ""
+# new_stack_tab = "prefix+c"       # tabs of the focused tile
+# previous_stack_tab = "prefix+p"
+# next_stack_tab = "prefix+n"
+# move_stack_tab_previous = ""     # optional
+# move_stack_tab_next = ""         # optional
+# switch_stack_tab = "prefix+1..9"
+# rename_pane = ["prefix+shift+p", "prefix+shift+t"]
 # edit_scrollback = "prefix+e"
 # clear_pane = ""                  # unbound; e.g. "prefix+ctrl+k"
 # focus_pane_left = "prefix+h"
@@ -184,7 +190,7 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # last_pane = ""          # optional, unset by default; bind e.g. "prefix+tab" for global back-and-forth
 # split_vertical = "prefix+v"
 # split_horizontal = "prefix+minus"
-# close_pane = "prefix+x"
+# close_pane = ["prefix+x", "prefix+shift+x"]
 # zoom = "prefix+z"       # legacy alias: fullscreen
 # resize_mode = "prefix+r"
 # resize_pane_left = ""   # optional, e.g. "ctrl+shift+alt+left" resizes without entering resize mode
@@ -313,7 +319,7 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 
 # Hide the tab row when a workspace has exactly one tab.
 # New tabs can still be created with the configured keybinding.
-# hide_tab_bar_when_single_tab = false
+# hide_tab_bar_when_single_tab = true
 
 # Desktop tab row placement: "top" or "bottom".
 # tab_bar_position = "top"

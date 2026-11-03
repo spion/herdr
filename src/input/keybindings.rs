@@ -39,6 +39,12 @@ pub(crate) enum KeybindAction {
     MoveTabPrevious,
     MoveTabNext,
     CloseTab,
+    NewStackTab,
+    PreviousStackTab,
+    NextStackTab,
+    MoveStackTabPrevious,
+    MoveStackTabNext,
+    SwitchStackTab(usize),
     RenamePane,
     FocusPaneLeft,
     FocusPaneDown,
@@ -119,6 +125,20 @@ pub(crate) fn resolve_non_indexed_action(
         (&keybinds.move_tab_previous, KeybindAction::MoveTabPrevious),
         (&keybinds.move_tab_next, KeybindAction::MoveTabNext),
         (&keybinds.close_tab, KeybindAction::CloseTab),
+        (&keybinds.new_stack_tab, KeybindAction::NewStackTab),
+        (
+            &keybinds.previous_stack_tab,
+            KeybindAction::PreviousStackTab,
+        ),
+        (&keybinds.next_stack_tab, KeybindAction::NextStackTab),
+        (
+            &keybinds.move_stack_tab_previous,
+            KeybindAction::MoveStackTabPrevious,
+        ),
+        (
+            &keybinds.move_stack_tab_next,
+            KeybindAction::MoveStackTabNext,
+        ),
         (&keybinds.rename_pane, KeybindAction::RenamePane),
         (&keybinds.edit_scrollback, KeybindAction::EditScrollback),
         (&keybinds.clear_pane, KeybindAction::ClearPane),
@@ -198,6 +218,13 @@ pub(crate) fn resolve_indexed_action(
             if trigger_matches(binding) {
                 if let Some(index) = binding.matched_index(key) {
                     return Some(KeybindAction::SwitchTab(index));
+                }
+            }
+        }
+        for binding in &keybinds.switch_stack_tab {
+            if trigger_matches(binding) {
+                if let Some(index) = binding.matched_index(key) {
+                    return Some(KeybindAction::SwitchStackTab(index));
                 }
             }
         }
@@ -316,7 +343,7 @@ mod tests {
         let one = TerminalKey::new(KeyCode::Char('1'), KeyModifiers::empty());
         assert!(matches!(
             resolve_prefix_binding(&keybinds, &one),
-            Some(KeybindMatch::Action(KeybindAction::SwitchTab(0)))
+            Some(KeybindMatch::Action(KeybindAction::SwitchStackTab(0)))
         ));
     }
 

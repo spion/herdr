@@ -378,6 +378,12 @@ pub struct Keybinds {
     pub switch_tab: Vec<IndexedKeybind>,
     pub switch_workspace: Vec<IndexedKeybind>,
     pub close_tab: ActionKeybinds,
+    pub new_stack_tab: ActionKeybinds,
+    pub previous_stack_tab: ActionKeybinds,
+    pub next_stack_tab: ActionKeybinds,
+    pub move_stack_tab_previous: ActionKeybinds,
+    pub move_stack_tab_next: ActionKeybinds,
+    pub switch_stack_tab: Vec<IndexedKeybind>,
     pub rename_pane: ActionKeybinds,
     pub edit_scrollback: ActionKeybinds,
     pub clear_pane: ActionKeybinds,
@@ -561,6 +567,12 @@ impl Config {
             switch_tab: Vec::new(),
             switch_workspace: Vec::new(),
             close_tab: empty_action!(),
+            new_stack_tab: empty_action!(),
+            previous_stack_tab: empty_action!(),
+            next_stack_tab: empty_action!(),
+            move_stack_tab_previous: empty_action!(),
+            move_stack_tab_next: empty_action!(),
+            switch_stack_tab: Vec::new(),
             rename_pane: empty_action!(),
             edit_scrollback: empty_action!(),
             clear_pane: empty_action!(),
@@ -709,6 +721,16 @@ impl Config {
                 source
             );
             apply_action!(keybinds.close_tab, close_tab, source);
+            apply_action!(keybinds.new_stack_tab, new_stack_tab, source);
+            apply_action!(keybinds.previous_stack_tab, previous_stack_tab, source);
+            apply_action!(keybinds.next_stack_tab, next_stack_tab, source);
+            apply_action!(
+                keybinds.move_stack_tab_previous,
+                move_stack_tab_previous,
+                source
+            );
+            apply_action!(keybinds.move_stack_tab_next, move_stack_tab_next, source);
+            apply_indexed!(keybinds.switch_stack_tab, switch_stack_tab, "", source);
             apply_action!(keybinds.rename_pane, rename_pane, source);
             apply_action!(keybinds.edit_scrollback, edit_scrollback, source);
             apply_action!(keybinds.clear_pane, clear_pane, source);
@@ -2366,29 +2388,42 @@ switch_tab = "prefix+?"
     fn default_keymap_is_prefix_first_and_tab_centered() {
         let kb = Config::default().keybinds();
         assert_eq!(
-            binding_triggers(&kb.next_tab),
+            binding_triggers(&kb.next_stack_tab),
             vec![BindingTrigger::Prefix((
                 KeyCode::Char('n'),
                 KeyModifiers::empty()
             ))]
         );
         assert_eq!(
-            binding_triggers(&kb.previous_tab),
+            binding_triggers(&kb.previous_stack_tab),
             vec![BindingTrigger::Prefix((
                 KeyCode::Char('p'),
                 KeyModifiers::empty()
             ))]
         );
-        assert_eq!(kb.switch_tab.len(), 9);
+        assert_eq!(kb.switch_stack_tab.len(), 9);
         assert!(kb
-            .switch_tab
+            .switch_stack_tab
             .iter()
             .all(|binding| binding.trigger.is_prefix()));
-        assert!(kb
-            .new_tab
-            .bindings
-            .iter()
-            .all(|binding| binding.trigger.is_prefix()));
+        assert_eq!(
+            binding_triggers(&kb.new_stack_tab),
+            vec![BindingTrigger::Prefix((
+                KeyCode::Char('c'),
+                KeyModifiers::empty()
+            ))]
+        );
+        // Workspace tabs stay reachable by config, but no default key reaches them.
+        for unbound in [
+            &kb.new_tab,
+            &kb.rename_tab,
+            &kb.previous_tab,
+            &kb.next_tab,
+            &kb.close_tab,
+        ] {
+            assert!(unbound.bindings.is_empty());
+        }
+        assert!(kb.switch_tab.is_empty());
         assert_eq!(
             binding_triggers(&kb.swap_pane_left),
             vec![BindingTrigger::Prefix((

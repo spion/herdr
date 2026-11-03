@@ -234,7 +234,7 @@ command = "lazygit"
         assert!(profile.contains("[keys]"));
         assert!(profile.contains("prefix = \"ctrl+a\""));
         assert!(profile.contains("new_tab = \"prefix+t\""));
-        assert!(profile.contains("next_tab = \"prefix+n\""));
+        assert!(profile.contains("next_stack_tab = \"prefix+n\""));
         assert!(!profile.contains("lazygit"));
         assert!(!profile.contains("command ="));
         assert!(!profile.contains("[[keys.command]]"));
@@ -416,13 +416,13 @@ command = "echo one"
         let round_tripped: Config = toml::from_str(&profile).unwrap();
         let keybinds = round_tripped.keybinds();
         let switch_tab_labels: Vec<_> = keybinds
-            .switch_tab
+            .switch_stack_tab
             .iter()
             .map(|binding| binding.label.as_str())
             .collect();
 
         assert!(!profile.contains("[[keys.command]]"));
-        assert!(!profile.contains("switch_tab = \"prefix+1..9\""));
+        assert!(!profile.contains("switch_stack_tab = \"prefix+1..9\""));
         assert!(profile.contains("\"prefix+2\""));
         assert!(profile.contains("\"prefix+9\""));
         assert!(!switch_tab_labels.contains(&"prefix+1"));

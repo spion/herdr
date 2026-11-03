@@ -7,6 +7,14 @@ use crate::protocol::{
 use crossterm::event::MouseEvent;
 mod text_editing;
 
+/// Default config, except that the tab bar also shows for one tab, as the
+/// geometry these tests pin assumes its row.
+fn tab_bar_config() -> ClientShellConfig {
+    let mut config = ClientShellConfig::from_config(&Config::default());
+    config.hide_tab_bar_when_single_tab = false;
+    config
+}
+
 pub(super) fn snapshot() -> ClientShellSnapshot {
     ClientShellSnapshot {
         boot_id: "boot-1".into(),
@@ -60,6 +68,9 @@ pub(super) fn snapshot() -> ClientShellSnapshot {
             foreground_cwd: Some("/repo".into()),
             focused: true,
             right_click_passthrough: false,
+            stack_id: None,
+            hidden: false,
+            terminal_title: None,
         }],
         agents: Vec::new(),
         commands: Vec::new(),
@@ -180,6 +191,8 @@ fn pane_scroll_result(
             terminal_id: "terminal_1".into(),
             workspace_id: "ws_1".into(),
             tab_id: "tab_1".into(),
+            stack_id: None,
+            hidden: false,
             focused: true,
             cwd: None,
             foreground_cwd: None,
@@ -261,4 +274,5 @@ mod link_hover;
 mod mobile;
 mod mouse_selection;
 mod popup_focus_projection;
+mod stack_strip;
 mod startup_overlays;

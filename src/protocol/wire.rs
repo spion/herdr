@@ -1064,6 +1064,16 @@ pub struct ClientShellPane {
     pub foreground_cwd: Option<String>,
     pub focused: bool,
     pub right_click_passthrough: bool,
+    /// Tile holding this pane. Panes sharing a tile are its tabs, listed in
+    /// tab order. Servers without per-tile tabs omit it.
+    #[serde(default)]
+    pub stack_id: Option<String>,
+    /// Behind another tab of its tile.
+    #[serde(default)]
+    pub hidden: bool,
+    /// Title the pane's program set, used to name its tab.
+    #[serde(default)]
+    pub terminal_title: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -2850,6 +2860,9 @@ mod tests {
                 foreground_cwd: Some("/repo".into()),
                 focused: true,
                 right_click_passthrough: false,
+                stack_id: None,
+                hidden: false,
+                terminal_title: None,
             }],
             agents: Vec::new(),
             commands: vec![ClientShellCommand {

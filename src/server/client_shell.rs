@@ -127,14 +127,13 @@ pub(super) fn snapshot_with_completions(
         .map(|pane| {
             let pane_id = pane.pane_id;
             let focused = focused_pane_id.as_deref() == Some(pane_id.as_str());
-            let right_click_passthrough = app
+            let located = app
                 .parse_pane_id(&pane_id)
                 .and_then(|(workspace_index, pane_id)| {
-                    app.state
-                        .workspaces
-                        .get(workspace_index)?
-                        .pane_state(pane_id)
-                })
+                    Some((app.state.workspaces.get(workspace_index)?, pane_id))
+                });
+            let right_click_passthrough = located
+                .and_then(|(workspace, pane_id)| workspace.pane_state(pane_id))
                 .is_some_and(|pane| pane.right_click_passthrough);
             protocol::ClientShellPane {
                 pane_id,
@@ -145,6 +144,9 @@ pub(super) fn snapshot_with_completions(
                 foreground_cwd: pane.foreground_cwd,
                 focused,
                 right_click_passthrough,
+                stack_id: pane.stack_id,
+                hidden: pane.hidden,
+                terminal_title: pane.terminal_title_stripped,
             }
         })
         .collect();

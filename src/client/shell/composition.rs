@@ -338,12 +338,22 @@ impl ClientShellState {
             self.hits.tab_scroll_left = Rect::default();
             self.hits.tab_scroll_right = Rect::default();
         }
+        let stack_strips = render::stack_strip::render_stack_strips(
+            &mut buffer,
+            &self.hits.panes,
+            snapshot,
+            &self.config,
+        );
         let mut frame = FrameData::from_ratatui_buffer_with_hyperlinks(&buffer, None, &[]);
         let mode_bar_cells = mode_bar.map(|bar| {
             let start = usize::from(bar.y) * usize::from(frame.width) + usize::from(bar.x);
             frame.cells[start..start + usize::from(bar.width)].to_vec()
         });
+        let stack_strip_cells = stack_strips.save(&frame);
         blit_pane_surface(&mut frame, &surface.frame, layout.pane_surface);
+        render::stack_strip::StackStrips::restore(&mut frame, &stack_strip_cells);
+        self.hits.stack_tabs = stack_strips.tabs;
+        self.hits.new_stack_tabs = stack_strips.new_tabs;
         restore_mode_bar(&mut frame, mode_bar, mode_bar_cells.as_deref());
         let mut occlusion = crate::kitty_graphics::surface::Occlusion::default();
         let has_selection = self

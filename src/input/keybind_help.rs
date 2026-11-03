@@ -161,6 +161,29 @@ pub(crate) fn keybind_help_groups(
             ],
         ),
         (
+            "tile tabs",
+            vec![
+                entry(binding_label(&keybinds.new_stack_tab), "new tab in tile"),
+                entry(
+                    binding_label(&keybinds.previous_stack_tab),
+                    "previous tab in tile",
+                ),
+                entry(binding_label(&keybinds.next_stack_tab), "next tab in tile"),
+                entry(
+                    binding_label(&keybinds.move_stack_tab_previous),
+                    "move tile tab left",
+                ),
+                entry(
+                    binding_label(&keybinds.move_stack_tab_next),
+                    "move tile tab right",
+                ),
+                entry(
+                    indexed_label(&keybinds.switch_stack_tab),
+                    "switch tile tab 1-9",
+                ),
+            ],
+        ),
+        (
             "panes",
             vec![
                 entry(binding_label(&keybinds.split_vertical), "split vertical"),

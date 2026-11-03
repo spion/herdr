@@ -127,6 +127,33 @@ pub(crate) fn split_direction() -> Input<SplitDirection> {
     .configure(|arg| choices(arg, SPLITS))
 }
 
+pub(crate) fn optional_split_direction() -> Input<Option<SplitDirection>> {
+    Input::value("direction", "DIRECTION", |slot, value| {
+        *slot = Some(parse_choice(SPLITS, "split direction", value)?);
+        Ok(())
+    })
+    .configure(|arg| choices(arg, SPLITS))
+}
+
+pub(crate) fn to_pane() -> Input<Option<String>> {
+    Input::value("to-pane", "ID", |slot, value| {
+        *slot = Some(crate::cli::normalize_pane_id(value));
+        Ok(())
+    })
+    .help("Move into the tile holding this pane")
+}
+
+pub(crate) fn index() -> Input<usize> {
+    Input::value("index", "N", |slot, value| {
+        *slot = value
+            .parse()
+            .map_err(|_| ParseError::Usage(format!("invalid --index: {value}")))?;
+        Ok(())
+    })
+    .required()
+    .help("Tab position in the tile, starting at 0")
+}
+
 pub(crate) fn finite(name: &'static str) -> Input<Option<f32>> {
     let update: fn(&mut Option<f32>, &str) -> Result<(), ParseError> = if name == "ratio" {
         |slot, value| {
@@ -402,7 +429,7 @@ impl Leaf {
     pub(super) fn command(&self) -> Command {
         let command = projection::command(self.name, (self.arguments)()).about(self.about);
         match self.name {
-            "input" => command.group(clap::ArgGroup::new("selector").args(["pane_id", "pane", "current"]).required(true)),
+            "input" | "add-tab" | "move-tab" => command.group(clap::ArgGroup::new("selector").args(["pane_id", "pane", "current"]).required(true)),
             "move" => command.group(clap::ArgGroup::new("destination").args(["tab", "new-tab", "new-workspace"]).required(true)),
             "send-text" => command.after_help("next: herdr pane run <PANE_ID> <COMMAND> sends text and Enter in one call"),
             "send-keys" => command.after_help("Use esc as the canonical Escape key name; escape is also accepted."),
@@ -603,11 +630,7 @@ pub(super) const LEAVES: &[Leaf] = &[
         arguments: PaneInputProjection::arguments,
         method: |matches| {
             let mut params = PaneInputProjection::from_matches(matches)?;
-            if matches.get_flag("current") {
-                params.pane_id = crate::cli::target::caller_pane_id()
-                    .map(|value| crate::cli::normalize_pane_id(&value))
-                    .ok_or_else(|| ParseError::Usage("--current requires HERDR_PANE_ID".into()))?;
-            }
+            params.pane_id = super::selected_pane(matches, params.pane_id)?;
             Ok(Method::PaneInputSet(params))
         },
     },
@@ -627,6 +650,48 @@ pub(super) const LEAVES: &[Leaf] = &[
                 true,
             )?;
             Ok(Method::PaneSplit(params))
+        },
+    },
+    Leaf {
+        name: "create",
+        about: "Open a pane beside another without covering it",
+        id: "cli:pane:create",
+        output: Output::Json,
+        arguments: PaneCreateProjection::arguments,
+        method: |matches| {
+            let mut params = PaneCreateProjection::from_matches(matches)?;
+            params.target_pane_id = super::caller_target(
+                matches,
+                params.target_pane_id,
+                crate::cli::target::caller_pane_id().as_deref(),
+                true,
+                true,
+            )?;
+            Ok(Method::PaneCreate(params))
+        },
+    },
+    Leaf {
+        name: "add-tab",
+        about: "Open a pane as a new tab in a pane's tile",
+        id: "cli:pane:add-tab",
+        output: Output::Json,
+        arguments: PaneAddTabProjection::arguments,
+        method: |matches| {
+            let mut params = PaneAddTabProjection::from_matches(matches)?;
+            params.pane_id = super::selected_pane(matches, params.pane_id)?;
+            Ok(Method::PaneAddTab(params))
+        },
+    },
+    Leaf {
+        name: "move-tab",
+        about: "Reorder a tab or move it into another tile",
+        id: "cli:pane:move-tab",
+        output: Output::Json,
+        arguments: PaneMoveTabProjection::arguments,
+        method: |matches| {
+            let mut params = PaneMoveTabProjection::from_matches(matches)?;
+            params.pane_id = super::selected_pane(matches, params.pane_id)?;
+            Ok(Method::PaneMoveTab(params))
         },
     },
     Leaf {

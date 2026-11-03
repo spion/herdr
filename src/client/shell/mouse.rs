@@ -680,6 +680,26 @@ impl ClientShellState {
     ///
     /// Hit-test order determines which overlapping control receives the event;
     /// the sidebar toggle takes precedence over the agent scrollbar beneath it.
+    /// The request for a left click on a tile's tab strip, if it hit one.
+    fn stack_strip_click(&self, point: (u16, u16)) -> Option<crate::api::schema::Method> {
+        use crate::api::schema::{Method, PaneAddTabParams, PaneTarget};
+        let hit = |hits: &[(Rect, String)]| {
+            hits.iter()
+                .find(|(rect, _)| super::contains(*rect, point))
+                .map(|(_, pane_id)| pane_id.clone())
+        };
+        if let Some(pane_id) = hit(&self.hits.stack_tabs) {
+            return Some(Method::PaneFocus(PaneTarget { pane_id }));
+        }
+        hit(&self.hits.new_stack_tabs).map(|pane_id| {
+            Method::PaneAddTab(PaneAddTabParams {
+                pane_id,
+                cwd: None,
+                focus: true,
+            })
+        })
+    }
+
     pub(super) fn handle_mouse(&mut self, mouse: MouseEvent, outcome: &mut ClientShellInput) {
         self.update_link_hover(mouse, outcome);
         let point = (mouse.column, mouse.row);
@@ -2062,6 +2082,11 @@ impl ClientShellState {
                     );
                     return;
                 }
+                if let Some(method) = self.stack_strip_click(point) {
+                    self.mode = ClientShellMode::Terminal;
+                    self.push_endpoint_method(method, outcome);
+                    return;
+                }
                 if super::contains(self.hits.tab_scroll_left, point) {
                     self.tab_scroll = self.tab_scroll.saturating_sub(1);
                     outcome.repaint = true;
@@ -2279,6 +2304,21 @@ impl ClientShellState {
                 }
             }
             MouseEventKind::Down(MouseButton::Middle) => {
+                let tab = self
+                    .hits
+                    .stack_tabs
+                    .iter()
+                    .find(|(rect, _)| super::contains(*rect, point))
+                    .map(|(_, pane_id)| pane_id.clone());
+                if let Some(pane_id) = tab {
+                    self.push_endpoint_method(
+                        crate::api::schema::Method::PaneClose(crate::api::schema::PaneTarget {
+                            pane_id,
+                        }),
+                        outcome,
+                    );
+                    return;
+                }
                 if let Some(hit) = self
                     .hits
                     .panes

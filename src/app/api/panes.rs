@@ -1,15 +1,15 @@
 use bytes::Bytes;
 
 use crate::api::schema::{
-    EventData, EventEnvelope, EventKind, PaneClearAgentAuthorityParams, PaneCopyMotion,
-    PaneCopyMotionParams, PaneCopySearchDirection, PaneCopySearchParams, PaneCurrentParams,
-    PaneDirection, PaneEdgesParams, PaneEdgesResult, PaneFocusDirectionParams,
-    PaneFocusDirectionReason, PaneFocusDirectionResult, PaneInfo, PaneInputSetParams,
-    PaneLayoutPane, PaneLayoutParams, PaneLayoutRect, PaneLayoutSnapshot, PaneLayoutSplit,
-    PaneListParams, PaneMoveDestination, PaneMoveParams, PaneMoveReason, PaneMoveResult,
-    PaneNeighborParams, PaneNeighborResult, PaneProcessInfo, PaneProcessInfoParams,
-    PaneProcessInfoProcess, PaneReadParams, PaneReadResult, PaneReleaseAgentParams,
-    PaneRenameParams, PaneReportAgentParams, PaneReportAgentSessionParams,
+    EventData, EventEnvelope, EventKind, PaneAddTabParams, PaneClearAgentAuthorityParams,
+    PaneCopyMotion, PaneCopyMotionParams, PaneCopySearchDirection, PaneCopySearchParams,
+    PaneCreateParams, PaneCurrentParams, PaneDirection, PaneEdgesParams, PaneEdgesResult,
+    PaneFocusDirectionParams, PaneFocusDirectionReason, PaneFocusDirectionResult, PaneInfo,
+    PaneInputSetParams, PaneLayoutPane, PaneLayoutParams, PaneLayoutRect, PaneLayoutSnapshot,
+    PaneLayoutSplit, PaneListParams, PaneMoveDestination, PaneMoveParams, PaneMoveReason,
+    PaneMoveResult, PaneMoveTabParams, PaneNeighborParams, PaneNeighborResult, PaneProcessInfo,
+    PaneProcessInfoParams, PaneProcessInfoProcess, PaneReadParams, PaneReadResult,
+    PaneReleaseAgentParams, PaneRenameParams, PaneReportAgentParams, PaneReportAgentSessionParams,
     PaneReportMetadataParams, PaneResizeParams, PaneResizeReason, PaneResizeResult,
     PaneScrollParams, PaneSelectionReadParams, PaneSendInputParams, PaneSendKeysParams,
     PaneSendTextParams, PaneSplitParams, PaneSwapParams, PaneSwapReason, PaneSwapResult,
@@ -117,8 +117,192 @@ impl App {
                 crate::api::schema::PaneRightClickTarget::Pane
             );
         }
-        if params.focus {
-            self.state.switch_workspace_tab(ws_idx, target_tab_idx);
+        let pane = self.adopt_new_pane(
+            ws_idx,
+            target_tab_idx,
+            new_pane,
+            params.focus,
+            previous_focus,
+        );
+        encode_success(id, ResponseResult::PaneInfo { pane })
+    }
+
+    pub(super) fn handle_pane_add_tab(&mut self, id: String, params: PaneAddTabParams) -> String {
+        let Some((ws_idx, target_pane_id)) = self.parse_pane_id(&params.pane_id) else {
+            return pane_not_found(id, &params.pane_id);
+        };
+        let previous_focus = self.state.current_pane_focus_target();
+        let (tab_idx, new_pane) = match self.spawn_tab(
+            ws_idx,
+            target_pane_id,
+            target_pane_id,
+            params.cwd,
+            params.focus,
+            Vec::new(),
+        ) {
+            Some(Ok(spawned)) => spawned,
+            Some(Err(err)) => return encode_error(id, "pane_add_tab_failed", err.to_string()),
+            None => return pane_not_found(id, &params.pane_id),
+        };
+        let pane = self.adopt_new_pane(ws_idx, tab_idx, new_pane, params.focus, previous_focus);
+        encode_success(id, ResponseResult::PaneInfo { pane })
+    }
+
+    pub(super) fn handle_pane_create(&mut self, id: String, params: PaneCreateParams) -> String {
+        let target = match params.target_pane_id.as_deref() {
+            Some(target) => self.parse_pane_id(target),
+            None => self.state.active.and_then(|ws_idx| {
+                Some((
+                    ws_idx,
+                    self.state.workspaces.get(ws_idx)?.focused_pane_id()?,
+                ))
+            }),
+        };
+        let Some((ws_idx, caller)) = target else {
+            return encode_error(id, "pane_not_found", "pane not found");
+        };
+        let direction = params
+            .direction
+            .unwrap_or(crate::api::schema::SplitDirection::Right);
+        let ws = &self.state.workspaces[ws_idx];
+        let Some(layout) = ws
+            .find_tab_index_for_pane(caller)
+            .map(|tab_idx| &ws.tabs[tab_idx].layout)
+        else {
+            return encode_error(id, "pane_not_found", "pane not found");
+        };
+        let toward = match direction {
+            crate::api::schema::SplitDirection::Right => NavDirection::Right,
+            crate::api::schema::SplitDirection::Down => NavDirection::Down,
+        };
+        let Some(tile) = layout.companion_tile(caller, toward, self.state.view.terminal_area)
+        else {
+            return self.handle_pane_split(
+                id,
+                PaneSplitParams {
+                    workspace_id: None,
+                    target_pane_id: self.public_pane_id(ws_idx, caller),
+                    direction,
+                    ratio: None,
+                    cwd: params.cwd,
+                    focus: params.focus,
+                    right_click: Default::default(),
+                    env: params.env,
+                },
+            );
+        };
+        let tile_holds_focus = layout
+            .stack_of(tile)
+            .is_some_and(|stack| stack.panes().contains(&layout.focused()));
+        let extra_env = match super::env::normalize_launch_env(params.env) {
+            Ok(env) => env,
+            Err((code, message)) => return encode_error(id, &code, message),
+        };
+        let previous_focus = self.state.current_pane_focus_target();
+        let (tab_idx, new_pane) =
+            match self.spawn_tab(ws_idx, tile, caller, params.cwd, params.focus, extra_env) {
+                Some(Ok(spawned)) => spawned,
+                Some(Err(err)) => return encode_error(id, "pane_create_failed", err.to_string()),
+                None => return encode_error(id, "pane_not_found", "pane not found"),
+            };
+        if !params.focus && !tile_holds_focus {
+            self.state.workspaces[ws_idx].tabs[tab_idx]
+                .layout
+                .show(new_pane.pane_id);
+        }
+        let pane = self.adopt_new_pane(ws_idx, tab_idx, new_pane, params.focus, previous_focus);
+        encode_success(id, ResponseResult::PaneInfo { pane })
+    }
+
+    /// Spawn a shell as a new tab in the tile holding `tile_pane`, starting in
+    /// `cwd`, else in the directory `cwd_pane` works in. None when `tile_pane`
+    /// is gone.
+    fn spawn_tab(
+        &mut self,
+        ws_idx: usize,
+        tile_pane: PaneId,
+        cwd_pane: PaneId,
+        cwd: Option<String>,
+        focus: bool,
+        extra_env: Vec<(String, String)>,
+    ) -> Option<std::io::Result<(usize, crate::workspace::NewPane)>> {
+        let (rows, cols) = self
+            .state
+            .new_pane_size(crate::ui::NewPanePlacement::Existing {
+                ws_idx,
+                pane: tile_pane,
+            });
+        let cwd = cwd.map(std::path::PathBuf::from).or_else(|| {
+            let follow_cwd = self.launch_cwd_for_pane_in_workspace(ws_idx, cwd_pane);
+            Some(self.resolve_new_terminal_cwd(follow_cwd))
+        });
+        let default_shell = self.state.default_shell.clone();
+        let scrollback_limit_bytes = self.state.pane_scrollback_limit_bytes;
+        let host_terminal_theme = self.state.host_terminal_theme;
+        let host_terminal_appearance = self.pane_host_terminal_appearance();
+        let shell_config = crate::pane::PaneShellConfig::new(&default_shell, self.state.shell_mode);
+        self.state.workspaces.get_mut(ws_idx)?.add_tab_pane(
+            tile_pane,
+            rows,
+            cols,
+            cwd,
+            scrollback_limit_bytes,
+            host_terminal_theme,
+            host_terminal_appearance,
+            shell_config,
+            extra_env,
+            focus,
+        )
+    }
+
+    pub(super) fn handle_pane_move_tab(&mut self, id: String, params: PaneMoveTabParams) -> String {
+        let Some((ws_idx, pane_id)) = self.parse_pane_id(&params.pane_id) else {
+            return pane_not_found(id, &params.pane_id);
+        };
+        let target_pane_id = match params.target_pane_id.as_deref() {
+            None => pane_id,
+            Some(target) => match self.parse_pane_id(target) {
+                Some((target_ws_idx, target_pane_id)) if target_ws_idx == ws_idx => target_pane_id,
+                _ => return pane_not_found(id, target),
+            },
+        };
+        let ws = &self.state.workspaces[ws_idx];
+        let Some(tab_idx) = ws.find_tab_index_for_pane(pane_id) else {
+            return pane_not_found(id, &params.pane_id);
+        };
+        if ws.find_tab_index_for_pane(target_pane_id) != Some(tab_idx) {
+            return encode_error(id, "invalid_pane_move_tab", "target pane is in another tab");
+        }
+        let previous_focus = self.state.current_pane_focus_target();
+        let layout = &mut self.state.workspaces[ws_idx].tabs[tab_idx].layout;
+        let stack_id = |layout: &crate::layout::TileLayout, pane| {
+            layout.stack_of(pane).map(crate::layout::Stack::id)
+        };
+        let Some(target_stack) = stack_id(layout, target_pane_id) else {
+            return pane_not_found(id, &params.pane_id);
+        };
+        let across_tiles = stack_id(layout, pane_id) != Some(target_stack);
+        layout.move_to_stack(pane_id, target_stack, Some(params.index), across_tiles);
+        if across_tiles {
+            self.state
+                .record_pane_focus_change(previous_focus, ws_idx, pane_id);
+        }
+        self.schedule_session_save();
+        self.emit_layout_updated_event(ws_idx, tab_idx);
+        encode_success(id, ResponseResult::Ok {})
+    }
+
+    /// Register a freshly spawned pane with the app and announce it.
+    fn adopt_new_pane(
+        &mut self,
+        ws_idx: usize,
+        tab_idx: usize,
+        new_pane: crate::workspace::NewPane,
+        focus: bool,
+        previous_focus: Option<crate::app::state::PaneFocusTarget>,
+    ) -> PaneInfo {
+        if focus {
+            self.state.switch_workspace_tab(ws_idx, tab_idx);
             self.state
                 .record_pane_focus_change(previous_focus, ws_idx, new_pane.pane_id);
             self.state.mode = crate::app::Mode::Terminal;
@@ -136,9 +320,8 @@ impl App {
             event: EventKind::PaneCreated,
             data: EventData::PaneCreated { pane: pane.clone() },
         });
-        self.emit_layout_updated_event(ws_idx, target_tab_idx);
-
-        encode_success(id, ResponseResult::PaneInfo { pane })
+        self.emit_layout_updated_event(ws_idx, tab_idx);
+        pane
     }
 
     pub(super) fn handle_pane_list(&mut self, id: String, params: PaneListParams) -> String {
@@ -3180,6 +3363,48 @@ mod tests {
         );
 
         assert_eq!(metadata_error_code(&response), "pane_not_found");
+    }
+
+    #[test]
+    fn api_pane_move_tab_joins_another_tile_and_reorders_within_it() {
+        let (mut app, _) = app_with_test_workspace();
+        let agent = app.state.workspaces[0].tabs[0].root_pane;
+        let logs = app.state.workspaces[0].test_split(ratatui::layout::Direction::Horizontal);
+        let agent_public = app.public_pane_id(0, agent).unwrap();
+        let logs_public = app.public_pane_id(0, logs).unwrap();
+
+        let response = app.handle_pane_move_tab(
+            "req".into(),
+            PaneMoveTabParams {
+                pane_id: logs_public.clone(),
+                target_pane_id: Some(agent_public),
+                index: 0,
+            },
+        );
+
+        let success: SuccessResponse = serde_json::from_str(&response).unwrap();
+        assert!(matches!(success.result, ResponseResult::Ok {}));
+        let layout = &app.state.workspaces[0].tabs[0].layout;
+        assert_eq!(layout.tile_count(), 1);
+        assert_eq!(layout.stack_of(agent).unwrap().panes(), [logs, agent]);
+        assert_eq!(
+            layout.focused(),
+            logs,
+            "a tab moved to another tile is focused"
+        );
+        assert!(!layout.is_shown(agent));
+
+        app.handle_pane_move_tab(
+            "req".into(),
+            PaneMoveTabParams {
+                pane_id: logs_public,
+                target_pane_id: None,
+                index: 1,
+            },
+        );
+        let layout = &app.state.workspaces[0].tabs[0].layout;
+        assert_eq!(layout.stack_of(agent).unwrap().panes(), [agent, logs]);
+        assert_eq!(layout.focused(), logs, "reordering keeps the shown tab");
     }
 
     #[test]

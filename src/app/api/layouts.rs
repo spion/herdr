@@ -299,8 +299,8 @@ impl App {
         node: &Node,
     ) -> Option<LayoutNode> {
         match node {
-            Node::Pane(pane_id) => Some(LayoutNode::Pane {
-                pane: self.layout_pane_description(ws_idx, tab_idx, *pane_id)?,
+            Node::Stack(stack) => Some(LayoutNode::Pane {
+                pane: self.layout_pane_description(ws_idx, tab_idx, stack.active())?,
             }),
             Node::Split {
                 direction,
@@ -548,7 +548,7 @@ fn final_tile_layout(root: &LayoutNode) -> crate::layout::TileLayout {
         match node {
             LayoutNode::Pane { .. } => {
                 *next_id += 1;
-                Node::Pane(PaneId::from_raw(*next_id))
+                Node::pane(PaneId::from_raw(*next_id))
             }
             LayoutNode::Split {
                 direction,

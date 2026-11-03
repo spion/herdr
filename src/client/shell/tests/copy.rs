@@ -346,7 +346,7 @@ fn retained_mouse_selection_survives_output_and_copies_without_terminal_input() 
 
 #[test]
 fn selection_edge_drag_requests_scroll_and_timer_continues_it() {
-    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    let mut state = ClientShellState::new(tab_bar_config());
     state.set_snapshot(Box::new(snapshot()));
     let mut pane_surface = surface();
     pane_surface.panes[0].scroll = Some(crate::protocol::PaneSurfaceScrollMetrics {
@@ -1845,6 +1845,9 @@ fn copy_mode_survives_mouse_motion_and_parks_across_focus_changes() {
         foreground_cwd: Some("/repo".into()),
         focused: true,
         right_click_passthrough: false,
+        stack_id: None,
+        hidden: false,
+        terminal_title: None,
     });
     state.set_snapshot(Box::new(unfocused.clone()));
     assert_eq!(state.mode, ClientShellMode::Terminal);

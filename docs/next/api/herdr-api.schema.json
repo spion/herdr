@@ -799,6 +799,10 @@
                 "null"
               ]
             },
+            "hidden": {
+              "description": "Behind another tab of its tile.",
+              "type": "boolean"
+            },
             "label": {
               "type": [
                 "string",
@@ -827,6 +831,13 @@
                 {
                   "type": "null"
                 }
+              ]
+            },
+            "stack_id": {
+              "description": "Tile holding this pane, valid until the server restarts. Panes sharing a\ntile are its tabs, and pane lists give them in tab order.",
+              "type": [
+                "string",
+                "null"
               ]
             },
             "state_labels": {
@@ -2428,6 +2439,28 @@
             }
           ]
         },
+        "PaneAddTabParams": {
+          "description": "Open a shell pane as a new tab in the tile holding `pane_id`.",
+          "properties": {
+            "cwd": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "focus": {
+              "default": false,
+              "type": "boolean"
+            },
+            "pane_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "pane_id"
+          ],
+          "type": "object"
+        },
         "PaneAgentState": {
           "enum": [
             "idle",
@@ -2548,6 +2581,44 @@
             "cursor",
             "content_revision"
           ],
+          "type": "object"
+        },
+        "PaneCreateParams": {
+          "description": "Open a shell pane beside `target_pane_id` without covering it: as a tab\nin the neighbouring tile focused last, else in the nearest tile toward\n`direction` (right by default), else in a new tile split off that way.\nThe new tab is shown unless its tile holds focus.",
+          "properties": {
+            "cwd": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "direction": {
+              "anyOf": [
+                {
+                  "$ref": "#/schemas/request/$defs/SplitDirection"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "env": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "focus": {
+              "default": false,
+              "type": "boolean"
+            },
+            "target_pane_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
           "type": "object"
         },
         "PaneCurrentParams": {
@@ -2777,6 +2848,30 @@
           "required": [
             "pane_id",
             "destination"
+          ],
+          "type": "object"
+        },
+        "PaneMoveTabParams": {
+          "description": "Move a tab to `index` in the tile holding `target_pane_id`, or within its\nown tile when that is omitted. A tab moved to another tile is focused.",
+          "properties": {
+            "index": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "pane_id": {
+              "type": "string"
+            },
+            "target_pane_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "pane_id",
+            "index"
           ],
           "type": "object"
         },
@@ -6312,6 +6407,54 @@
             "params"
           ],
           "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "pane.add_tab",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/PaneAddTabParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "pane.move_tab",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/PaneMoveTabParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "pane.create",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/PaneCreateParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
         }
       ],
       "properties": {
@@ -7907,6 +8050,10 @@
                 "null"
               ]
             },
+            "hidden": {
+              "description": "Behind another tab of its tile.",
+              "type": "boolean"
+            },
             "label": {
               "type": [
                 "string",
@@ -7935,6 +8082,13 @@
                 {
                   "type": "null"
                 }
+              ]
+            },
+            "stack_id": {
+              "description": "Tile holding this pane, valid until the server restarts. Panes sharing a\ntile are its tabs, and pane lists give them in tab order.",
+              "type": [
+                "string",
+                "null"
               ]
             },
             "state_labels": {

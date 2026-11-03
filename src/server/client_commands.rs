@@ -254,6 +254,18 @@ mod tests {
             actual.remove("pane.link.resolve").as_deref(),
             Some("f5e4a3e01453ae7b188f127ce951c12c20e0bebcc17cc364eeb6d1a01fd5bf81")
         );
+        assert_eq!(
+            actual.remove("pane.add_tab").as_deref(),
+            Some("6c9f56255b5527b3e07c8ea040b0ec433b323062037e29db653e8635e57d485b")
+        );
+        assert_eq!(
+            actual.remove("pane.move_tab").as_deref(),
+            Some("48f9c7c167c8324965950e1404ff0e9419035481d58d8126174e998ad929cfcf")
+        );
+        assert_eq!(
+            actual.remove("pane.create").as_deref(),
+            Some("6753753a5e61c67716f19b015c48b59e1be619ac922c1aff393d55fa5b7c2dba")
+        );
 
         assert_eq!(
             actual, expected,

@@ -93,6 +93,16 @@ fn caller_target(
     Ok(pane)
 }
 
+/// The pane chosen by an `input_target` selector, resolving `--current`.
+fn selected_pane(matches: &ArgMatches, pane: String) -> Result<String, ParseError> {
+    if !matches.get_flag("current") {
+        return Ok(pane);
+    }
+    super::target::caller_pane_id()
+        .map(|value| super::normalize_pane_id(&value))
+        .ok_or_else(|| ParseError::Usage("--current requires HERDR_PANE_ID".into()))
+}
+
 fn direction(value: &str) -> Result<PaneDirection, ParseError> {
     bindings::parse_choice(bindings::DIRECTIONS, "pane direction", value)
 }
@@ -332,6 +342,27 @@ mod tests {
                 "cli:pane:split",
                 "pane.split",
                 json!({"target_pane_id": "pane", "direction": "down", "focus": false, "right_click": "herdr"}),
+            ),
+            (
+                "create",
+                vec!["pane", "--direction", "down"],
+                "cli:pane:create",
+                "pane.create",
+                json!({"target_pane_id": "pane", "direction": "down", "focus": false}),
+            ),
+            (
+                "add-tab",
+                vec!["pane", "--cwd", "/tmp"],
+                "cli:pane:add-tab",
+                "pane.add_tab",
+                json!({"pane_id": "pane", "cwd": "/tmp", "focus": false}),
+            ),
+            (
+                "move-tab",
+                vec!["pane", "--to-pane", "other", "--index", "2"],
+                "cli:pane:move-tab",
+                "pane.move_tab",
+                json!({"pane_id": "pane", "target_pane_id": "other", "index": 2}),
             ),
             (
                 "swap",

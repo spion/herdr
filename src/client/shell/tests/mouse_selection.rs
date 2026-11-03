@@ -1165,7 +1165,7 @@ fn tab_drag_clears_its_drop_target_after_leaving_the_tab_row() {
 
 #[test]
 fn tab_wheel_switches_tabs_without_changing_overflow_scroll() {
-    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    let mut state = ClientShellState::new(tab_bar_config());
     state.set_snapshot(Box::new(snapshot()));
     state.set_pane_surface(surface());
     state.compose(106, 20).expect("tab bar");
@@ -1193,7 +1193,7 @@ fn tab_wheel_switches_tabs_without_changing_overflow_scroll() {
 
 #[test]
 fn context_menu_keyboard_and_outside_click_are_client_owned() {
-    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    let mut state = ClientShellState::new(tab_bar_config());
     state.set_snapshot(Box::new(snapshot()));
     state.set_pane_surface(surface());
     state.compose(106, 20).expect("composed frame");

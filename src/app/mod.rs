@@ -2782,6 +2782,80 @@ mod tests {
         }
     }
 
+    /// Business rule: a companion an agent opens never covers the agent and
+    /// never takes the user's keyboard. It splits off a tile once, then joins
+    /// that tile as a tab, in the background when the user works there.
+    #[tokio::test]
+    async fn pane_create_reuses_the_neighbouring_tile_without_covering_the_caller() {
+        let _guard = config_env_lock().lock().unwrap();
+        let original_shell = std::env::var_os("SHELL");
+        std::env::set_var("SHELL", exiting_test_command());
+
+        let mut app = test_app();
+        let workspace = Workspace::test_new("api-pane-create");
+        let caller = workspace.tabs[0].root_pane;
+        app.state.workspaces = vec![workspace];
+        app.state.ensure_test_terminals();
+        app.state.active = Some(0);
+        app.state.selected = 0;
+        app.state.view.terminal_area = ratatui::layout::Rect::new(0, 0, 120, 40);
+        let caller_id = app.pane_info(0, caller).unwrap().pane_id;
+        let create = |app: &mut App| {
+            let response = app.handle_api_request(crate::api::schema::Request {
+                id: "req_pane_create".into(),
+                method: crate::api::schema::Method::PaneCreate(
+                    crate::api::schema::PaneCreateParams {
+                        target_pane_id: Some(caller_id.clone()),
+                        direction: None,
+                        cwd: None,
+                        focus: false,
+                        env: Default::default(),
+                    },
+                ),
+            });
+            let response: serde_json::Value = serde_json::from_str(&response).unwrap();
+            let pane_id = response["result"]["pane"]["pane_id"].as_str().unwrap();
+            app.parse_pane_id(pane_id).unwrap().1
+        };
+        fn layout(app: &App) -> &crate::layout::TileLayout {
+            &app.state.workspaces[0].tabs[0].layout
+        }
+
+        let first = create(&mut app);
+        assert_eq!(
+            layout(&app).tile_count(),
+            2,
+            "no neighbour yet, so it splits"
+        );
+
+        let second = create(&mut app);
+        assert_eq!(layout(&app).tile_count(), 2);
+        assert_eq!(
+            layout(&app).stack_of(first).unwrap().panes(),
+            [first, second]
+        );
+        assert!(layout(&app).is_shown(second));
+        assert_eq!(layout(&app).focused(), caller);
+
+        app.state.workspaces[0].tabs[0].layout.focus_pane(second);
+        let third = create(&mut app);
+        assert!(
+            !layout(&app).is_shown(third),
+            "the user's tile keeps its tab"
+        );
+        assert_eq!(layout(&app).focused(), second);
+        assert!(layout(&app).is_shown(caller));
+
+        let runtimes: Vec<_> = app.terminal_runtimes.drain().collect();
+        for (_terminal_id, runtime) in runtimes {
+            runtime.shutdown();
+        }
+        match original_shell {
+            Some(value) => std::env::set_var("SHELL", value),
+            None => std::env::remove_var("SHELL"),
+        }
+    }
+
     #[tokio::test]
     async fn pane_split_request_applies_ratio() {
         let _guard = config_env_lock().lock().unwrap();

@@ -8,7 +8,7 @@ use tracing::{error, warn};
 
 use crate::detect::AgentState;
 use crate::events::AppEvent;
-use crate::layout::{Node, PaneId, TileLayout};
+use crate::layout::{Node, PaneId, Stack, TileLayout};
 use crate::pane::{PaneLaunchEnv, PaneState};
 use crate::render_signal::RenderSignal;
 use crate::terminal::{TerminalId, TerminalRuntime, TerminalState};
@@ -149,6 +149,7 @@ fn collect_snapshot_pane_ids(node: &LayoutSnapshot) -> Vec<u32> {
 fn collect_snapshot_ids_inner(node: &LayoutSnapshot, ids: &mut Vec<u32>) {
     match node {
         LayoutSnapshot::Pane(id) => ids.push(*id),
+        LayoutSnapshot::Stack { panes, .. } => ids.extend_from_slice(panes),
         LayoutSnapshot::Split { first, second, .. } => {
             collect_snapshot_ids_inner(first, ids);
             collect_snapshot_ids_inner(second, ids);
@@ -178,6 +179,7 @@ fn migrated_public_pane_numbers_by_old_raw(
 fn collect_layout_snapshot_pane_ids(node: &LayoutSnapshot, ids: &mut Vec<u32>) {
     match node {
         LayoutSnapshot::Pane(id) => ids.push(*id),
+        LayoutSnapshot::Stack { panes, .. } => ids.extend_from_slice(panes),
         LayoutSnapshot::Split { first, second, .. } => {
             collect_layout_snapshot_pane_ids(first, ids);
             collect_layout_snapshot_pane_ids(second, ids);
@@ -922,7 +924,7 @@ fn take_restore_plan_for_snapshot(
 
 pub(super) fn prune_restored_node(node: Node, surviving: &HashSet<PaneId>) -> Option<Node> {
     match node {
-        Node::Pane(id) => surviving.contains(&id).then_some(Node::Pane(id)),
+        Node::Stack(stack) => stack.retain(|id| surviving.contains(&id)).map(Node::Stack),
         Node::Split {
             direction,
             ratio,
@@ -970,7 +972,18 @@ fn remap_inner(snap: &LayoutSnapshot, id_map: &mut HashMap<u32, PaneId>) -> Node
         LayoutSnapshot::Pane(old_id) => {
             let new_id = PaneId::alloc();
             id_map.insert(*old_id, new_id);
-            Node::Pane(new_id)
+            Node::pane(new_id)
+        }
+        LayoutSnapshot::Stack { panes, active } => {
+            let new_ids = panes
+                .iter()
+                .map(|old_id| {
+                    let new_id = PaneId::alloc();
+                    id_map.insert(*old_id, new_id);
+                    new_id
+                })
+                .collect();
+            Node::Stack(Stack::new(new_ids, *active))
         }
         LayoutSnapshot::Split {
             direction,
@@ -1002,7 +1015,7 @@ pub(super) fn collect_pane_ids(node: &Node) -> Vec<PaneId> {
 
 fn collect_ids_inner(node: &Node, ids: &mut Vec<PaneId>) {
     match node {
-        Node::Pane(id) => ids.push(*id),
+        Node::Stack(stack) => ids.extend_from_slice(stack.panes()),
         Node::Split { first, second, .. } => {
             collect_ids_inner(first, ids);
             collect_ids_inner(second, ids);
@@ -1037,12 +1050,12 @@ mod tests {
         let node = Node::Split {
             direction: Direction::Horizontal,
             ratio: 0.5,
-            first: Box::new(Node::Pane(PaneId::from_raw(0))),
+            first: Box::new(Node::pane(PaneId::from_raw(0))),
             second: Box::new(Node::Split {
                 direction: Direction::Vertical,
                 ratio: 0.3,
-                first: Box::new(Node::Pane(PaneId::from_raw(1))),
-                second: Box::new(Node::Pane(PaneId::from_raw(2))),
+                first: Box::new(Node::pane(PaneId::from_raw(1))),
+                second: Box::new(Node::pane(PaneId::from_raw(2))),
             }),
         };
 
@@ -1063,14 +1076,14 @@ mod tests {
         let node = Node::Split {
             direction: Direction::Horizontal,
             ratio: 0.5,
-            first: Box::new(Node::Pane(keep)),
-            second: Box::new(Node::Pane(missing)),
+            first: Box::new(Node::pane(keep)),
+            second: Box::new(Node::pane(missing)),
         };
         let surviving = std::collections::HashSet::from([keep]);
 
         let pruned = prune_restored_node(node, &surviving).expect("remaining pane should survive");
 
-        assert!(matches!(pruned, Node::Pane(id) if id == keep));
+        assert!(matches!(&pruned, Node::Stack(stack) if stack.panes() == [keep]));
     }
 
     #[test]
