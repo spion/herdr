@@ -409,6 +409,16 @@ cli_projection! { pub(crate) PaneTargetProjection for PaneTarget {
     pane_id => Field::new(String::new()).input(pane_id()),
 } }
 
+pub(crate) struct PaneFocusArgs {
+    pub(crate) pane_id: Option<String>,
+    pub(crate) direction: Option<PaneDirection>,
+}
+
+cli_projection! { pub(crate) PaneFocusProjection for PaneFocusArgs {
+    pane_id => target(true),
+    direction => Field::new(None).input(optional_direction()),
+} }
+
 #[derive(Clone, Copy)]
 pub(super) enum Output {
     Json,
@@ -574,14 +584,14 @@ pub(super) const LEAVES: &[Leaf] = &[
             Ok(Method::PaneEdges(params))
         },
     },
-    leaf!(
-        "focus",
-        "Focus a neighboring pane",
-        "cli:pane:focus",
-        Json,
-        PaneFocusProjection,
-        PaneFocusDirection
-    ),
+    Leaf {
+        name: "focus",
+        about: "Focus a pane, or its neighbor with --direction",
+        id: "cli:pane:focus",
+        output: Output::Json,
+        arguments: PaneFocusProjection::arguments,
+        method: super::focus,
+    },
     leaf!(
         "resize",
         "Resize a pane split",

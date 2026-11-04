@@ -50,6 +50,7 @@ Choose the primitive that matches the job:
 
 - Workspace, tab, and pane topology organize terminal locations.
 - A tile is one region of a tab's layout. It shows one pane at a time; its other panes wait behind it as tabs in the tile's tab strip. Panes sharing a tile have the same `.stack_id` in pane responses, and `.hidden` is true for those not shown.
+- Two things are called tabs. A Herdr tab (`w1:t1`, `herdr tab`) is a whole layout, and `herdr tab list` lists only those. A tile's tabs are panes in that tile's strip, so `herdr pane list` lists them. When the user asks for a tab without saying which, use `pane create`.
 - Pane commands control raw terminals, shells, tests, servers, input, and output.
 - Agent commands control the recognized coding agent currently occupying a pane.
 
@@ -66,6 +67,8 @@ Public IDs are opaque stable handles:
 - workspace: `w1`
 - tab: `w1:t1`
 - pane: `w1:p1`
+
+`.stack_id` describes where a pane is right now. It changes when the pane moves to another tile or the server restarts, so read it fresh and do not store it.
 
 Closed tab and pane IDs are not reused. A pane moved into another workspace receives a new workspace-qualified pane ID. After `pane move`, continue with `.result.move_result.pane.pane_id` or the live agent name. The old value is reported as `.result.move_result.previous_pane_id`; only the moved process's inherited caller context keeps resolving that old ID, so do not use it as a general agent target.
 
@@ -118,6 +121,8 @@ herdr pane create --current --cwd "$PWD" --no-focus
 ```
 
 `pane create` never covers the caller. It adds a tab to the neighbouring tile the user was in last, else to the nearest tile on the `--direction` side (`right` by default, or `down`), and splits the caller's tile only when there is no such tile. When the user is working in that tile, the new tab opens behind the one they see, and `.result.pane.hidden` is true. So repeated companions collect as tabs in one tile instead of shrinking the layout. Pass `--direction down` for a narrow or tall caller, after checking it with `herdr pane layout --pane "$HERDR_PANE_ID"`. Use `pane split` only when the user asks for a new split or a specific geometry. Read the new pane ID from `.result.pane.pane_id`.
+
+When `.result.pane.hidden` is true the user cannot see the new pane, so tell them it opened behind a tab. Its process runs normally. `herdr pane focus <pane>` or `herdr agent focus <name>` brings it to the front, but both move the user's focus, so use them only when the user asks.
 
 An available shell pane must be at its interactive prompt, with the shell itself in the foreground and no foreground command, editor, or agent running. Start a supported agent in that pane with a useful unique name:
 

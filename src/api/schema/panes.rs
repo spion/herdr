@@ -306,13 +306,11 @@ crate::cli::projection::cli_params! {
     }
 }
 
-crate::cli::projection::cli_params! {
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-    pub struct PaneFocusDirectionParams => PaneFocusProjection {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub pane_id: Option<String> => binding::target(false),
-        pub direction: PaneDirection => Field::new(PaneDirection::Left).input(binding::direction()),
-    }
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct PaneFocusDirectionParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pane_id: Option<String>,
+    pub direction: PaneDirection,
 }
 
 crate::cli::projection::cli_params! {
