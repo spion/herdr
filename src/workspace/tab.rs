@@ -344,7 +344,7 @@ impl Tab {
                 .layout
                 .stack_of(target)
                 .map(|stack| stack.id())
-                .and_then(|stack| self.layout.add_tab(stack, None, false)),
+                .and_then(|stack| self.layout.add_to_stack(stack, None, false)),
         };
         let Some(new_id) = new_id else {
             return Err(std::io::Error::new(

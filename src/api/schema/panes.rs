@@ -40,9 +40,9 @@ crate::cli::projection::cli_params! {
 }
 
 crate::cli::projection::cli_params! {
-    /// Open a shell pane as a new tab in the tile holding `pane_id`.
+    /// Open a shell pane in the stack holding `pane_id`.
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-    pub struct PaneAddTabParams => PaneAddTabProjection {
+    pub struct PaneStackAddParams => PaneStackAddProjection {
         pub pane_id: String => binding::input_target(),
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub cwd: Option<String> => Field::new(None).input(binding::optional_text("cwd", "PATH").path()),
@@ -52,10 +52,10 @@ crate::cli::projection::cli_params! {
 }
 
 crate::cli::projection::cli_params! {
-    /// Move a tab to `index` in the tile holding `target_pane_id`, or within its
-    /// own tile when that is omitted. A tab moved to another tile is focused.
+    /// Move a pane to `index` in the stack holding `target_pane_id`, or within its
+    /// own stack when that is omitted. A pane moved to another stack is focused.
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-    pub struct PaneMoveTabParams => PaneMoveTabProjection {
+    pub struct PaneStackMoveParams => PaneStackMoveProjection {
         pub pane_id: String => binding::input_target(),
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub target_pane_id: Option<String> => Field::new(None).input(binding::to_pane()),
@@ -63,10 +63,10 @@ crate::cli::projection::cli_params! {
     }
 }
 
-/// Move a tab into a new tile on `side` of the tile holding `target_pane_id`,
+/// Move a pane into a new tile on `side` of the tile holding `target_pane_id`,
 /// or of its own tile when that is omitted, and focus it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-pub struct PaneSplitTabParams {
+pub struct PaneStackSplitParams {
     pub pane_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target_pane_id: Option<String>,
@@ -74,10 +74,10 @@ pub struct PaneSplitTabParams {
 }
 
 crate::cli::projection::cli_params! {
-    /// Open a shell pane beside `target_pane_id` without covering it: as a tab
-    /// in the neighbouring tile focused last, else in the nearest tile toward
+    /// Open a shell pane beside `target_pane_id` without covering it: in the stack
+    /// of the neighbouring tile focused last, else of the nearest tile toward
     /// `direction` (right by default), else in a new tile split off that way.
-    /// The new tab is shown unless its tile holds focus.
+    /// The new pane is shown unless its tile holds focus.
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
     pub struct PaneCreateParams => PaneCreateProjection {
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -250,8 +250,8 @@ pub struct LayoutDescription {
     pub root: LayoutNode,
 }
 
-fn is_first_tab(active_tab: &usize) -> bool {
-    *active_tab == 0
+fn is_first_in_stack(active: &usize) -> bool {
+    *active == 0
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
@@ -260,12 +260,12 @@ pub enum LayoutNode {
     Pane {
         #[serde(flatten)]
         pane: LayoutPane,
-        /// The tile's other tabs, in order after `pane`.
+        /// The stack's other panes, in order after `pane`.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        tabs: Vec<LayoutPane>,
-        /// The tab the tile shows: 0 for `pane`, then `tabs` in order.
-        #[serde(default, skip_serializing_if = "is_first_tab")]
-        active_tab: usize,
+        stack: Vec<LayoutPane>,
+        /// The pane the tile shows: 0 for `pane`, then `stack` in order.
+        #[serde(default, skip_serializing_if = "is_first_in_stack")]
+        active: usize,
     },
     Split {
         direction: SplitDirection,
@@ -563,11 +563,11 @@ pub struct PaneInfo {
     pub terminal_id: String,
     pub workspace_id: String,
     pub tab_id: String,
-    /// Tile holding this pane, valid until the server restarts. Panes sharing a
-    /// tile are its tabs, and pane lists give them in tab order.
+    /// Stack holding this pane, valid until the server restarts. Panes sharing a
+    /// stack share a tile, and pane lists give them in stack order.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stack_id: Option<String>,
-    /// Behind another tab of its tile.
+    /// Behind another pane of its stack.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub hidden: bool,
     pub focused: bool,

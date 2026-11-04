@@ -799,7 +799,7 @@ impl Workspace {
 
     /// Open a shell pane as a new tab in `pane_id`'s tile.
     #[allow(clippy::too_many_arguments)]
-    pub fn add_tab_pane(
+    pub fn add_stack_pane(
         &mut self,
         pane_id: PaneId,
         rows: u16,
@@ -830,7 +830,7 @@ impl Workspace {
 
     /// Open `argv` as a new tab in `pane_id`'s tile.
     #[allow(clippy::too_many_arguments)]
-    pub fn add_tab_pane_argv(
+    pub fn add_stack_pane_argv(
         &mut self,
         pane_id: PaneId,
         rows: u16,

@@ -413,7 +413,7 @@ impl TileLayout {
 
     /// Allocate a pane in `stack`, at `index` or at the end. With `activate`,
     /// it becomes active and focused; otherwise it is hidden.
-    pub fn add_tab(
+    pub fn add_to_stack(
         &mut self,
         stack: StackId,
         index: Option<usize>,
@@ -437,7 +437,7 @@ impl TileLayout {
             return false;
         };
         if source.id == stack {
-            self.move_tab(pane, index.unwrap_or(usize::MAX));
+            self.move_in_stack(pane, index.unwrap_or(usize::MAX));
         } else {
             if find_stack_by_id_mut(&mut self.root, stack).is_none() {
                 return false;
@@ -548,7 +548,7 @@ impl TileLayout {
 
     /// Move `pane` to `index` within its stack. The shown pane and focus do not
     /// change.
-    pub fn move_tab(&mut self, pane: PaneId, index: usize) -> bool {
+    pub fn move_in_stack(&mut self, pane: PaneId, index: usize) -> bool {
         let Some(stack) = find_stack_mut(&mut self.root, pane) else {
             return false;
         };
@@ -1819,7 +1819,7 @@ mod stack_properties {
             pane: Index,
             horizontal: bool,
         },
-        AddTab {
+        AddToStack {
             stack: Index,
             index: Option<Index>,
             activate: bool,
@@ -1861,7 +1861,7 @@ mod stack_properties {
             3 => (any::<Index>(), any::<bool>())
                 .prop_map(|(pane, horizontal)| Op::Split { pane, horizontal }),
             3 => (any::<Index>(), slot(), any::<bool>())
-                .prop_map(|(stack, index, activate)| Op::AddTab { stack, index, activate }),
+                .prop_map(|(stack, index, activate)| Op::AddToStack { stack, index, activate }),
             3 => (any::<Index>(), any::<Index>(), slot(), any::<bool>()).prop_map(
                 |(pane, stack, index, activate)| Op::MoveToStack { pane, stack, index, activate }
             ),
@@ -1906,12 +1906,12 @@ mod stack_properties {
                 };
                 layout.split_pane(pane(target), direction, 0.5);
             }
-            Op::AddTab {
+            Op::AddToStack {
                 stack: target,
                 index,
                 activate,
             } => {
-                layout.add_tab(stack(target), slot(index), *activate);
+                layout.add_to_stack(stack(target), slot(index), *activate);
             }
             Op::MoveToStack {
                 pane: moved,
@@ -1943,7 +1943,7 @@ mod stack_properties {
                 layout.split_out(pane(moved), pane(target), side);
             }
             Op::Reorder { pane: moved, index } => {
-                layout.move_tab(pane(moved), index.index(MAX_SLOT));
+                layout.move_in_stack(pane(moved), index.index(MAX_SLOT));
             }
             Op::Swap { first, second } => {
                 layout.swap_panes(pane(first), pane(second));

@@ -145,10 +145,10 @@ operations::define_operations! {
     PluginPaneOpen(PluginPaneOpenParams) => "plugin.pane.open", true, false;
     PluginPaneFocus(PluginPaneFocusParams) => "plugin.pane.focus", true, false;
     PluginPaneClose(PluginPaneCloseParams) => "plugin.pane.close", true, false;
-    PaneAddTab(PaneAddTabParams) => "pane.add_tab", true, true;
-    PaneMoveTab(PaneMoveTabParams) => "pane.move_tab", true, true;
+    PaneStackAdd(PaneStackAddParams) => "pane.stack_add", true, true;
+    PaneStackMove(PaneStackMoveParams) => "pane.stack_move", true, true;
     PaneCreate(PaneCreateParams) => "pane.create", true, true;
-    PaneSplitTab(PaneSplitTabParams) => "pane.split_tab", true, true;
+    PaneStackSplit(PaneStackSplitParams) => "pane.stack_split", true, true;
 }
 
 #[cfg(test)]

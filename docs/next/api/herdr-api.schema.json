@@ -800,7 +800,7 @@
               ]
             },
             "hidden": {
-              "description": "Behind another tab of its tile.",
+              "description": "Behind another pane of its stack.",
               "type": "boolean"
             },
             "label": {
@@ -834,7 +834,7 @@
               ]
             },
             "stack_id": {
-              "description": "Tile holding this pane, valid until the server restarts. Panes sharing a\ntile are its tabs, and pane lists give them in tab order.",
+              "description": "Stack holding this pane, valid until the server restarts. Panes sharing a\nstack share a tile, and pane lists give them in stack order.",
               "type": [
                 "string",
                 "null"
@@ -2260,8 +2260,8 @@
           "oneOf": [
             {
               "properties": {
-                "active_tab": {
-                  "description": "The tab the tile shows: 0 for `pane`, then `tabs` in order.",
+                "active": {
+                  "description": "The pane the tile shows: 0 for `pane`, then `stack` in order.",
                   "format": "uint",
                   "minimum": 0,
                   "type": "integer"
@@ -2299,8 +2299,8 @@
                     "null"
                   ]
                 },
-                "tabs": {
-                  "description": "The tile's other tabs, in order after `pane`.",
+                "stack": {
+                  "description": "The stack's other panes, in order after `pane`.",
                   "items": {
                     "$ref": "#/schemas/request/$defs/LayoutPane"
                   },
@@ -2490,28 +2490,6 @@
             }
           ]
         },
-        "PaneAddTabParams": {
-          "description": "Open a shell pane as a new tab in the tile holding `pane_id`.",
-          "properties": {
-            "cwd": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "focus": {
-              "default": false,
-              "type": "boolean"
-            },
-            "pane_id": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "pane_id"
-          ],
-          "type": "object"
-        },
         "PaneAgentState": {
           "enum": [
             "idle",
@@ -2635,7 +2613,7 @@
           "type": "object"
         },
         "PaneCreateParams": {
-          "description": "Open a shell pane beside `target_pane_id` without covering it: as a tab\nin the neighbouring tile focused last, else in the nearest tile toward\n`direction` (right by default), else in a new tile split off that way.\nThe new tab is shown unless its tile holds focus.",
+          "description": "Open a shell pane beside `target_pane_id` without covering it: in the stack\nof the neighbouring tile focused last, else of the nearest tile toward\n`direction` (right by default), else in a new tile split off that way.\nThe new pane is shown unless its tile holds focus.",
           "properties": {
             "cwd": {
               "type": [
@@ -2899,30 +2877,6 @@
           "required": [
             "pane_id",
             "destination"
-          ],
-          "type": "object"
-        },
-        "PaneMoveTabParams": {
-          "description": "Move a tab to `index` in the tile holding `target_pane_id`, or within its\nown tile when that is omitted. A tab moved to another tile is focused.",
-          "properties": {
-            "index": {
-              "format": "uint",
-              "minimum": 0,
-              "type": "integer"
-            },
-            "pane_id": {
-              "type": "string"
-            },
-            "target_pane_id": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          },
-          "required": [
-            "pane_id",
-            "index"
           ],
           "type": "object"
         },
@@ -3408,8 +3362,54 @@
           ],
           "type": "object"
         },
-        "PaneSplitTabParams": {
-          "description": "Move a tab into a new tile on `side` of the tile holding `target_pane_id`,\nor of its own tile when that is omitted, and focus it.",
+        "PaneStackAddParams": {
+          "description": "Open a shell pane in the stack holding `pane_id`.",
+          "properties": {
+            "cwd": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "focus": {
+              "default": false,
+              "type": "boolean"
+            },
+            "pane_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "pane_id"
+          ],
+          "type": "object"
+        },
+        "PaneStackMoveParams": {
+          "description": "Move a pane to `index` in the stack holding `target_pane_id`, or within its\nown stack when that is omitted. A pane moved to another stack is focused.",
+          "properties": {
+            "index": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "pane_id": {
+              "type": "string"
+            },
+            "target_pane_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "pane_id",
+            "index"
+          ],
+          "type": "object"
+        },
+        "PaneStackSplitParams": {
+          "description": "Move a pane into a new tile on `side` of the tile holding `target_pane_id`,\nor of its own tile when that is omitted, and focus it.",
           "properties": {
             "pane_id": {
               "type": "string"
@@ -6484,11 +6484,11 @@
         {
           "properties": {
             "method": {
-              "const": "pane.add_tab",
+              "const": "pane.stack_add",
               "type": "string"
             },
             "params": {
-              "$ref": "#/schemas/request/$defs/PaneAddTabParams"
+              "$ref": "#/schemas/request/$defs/PaneStackAddParams"
             }
           },
           "required": [
@@ -6500,11 +6500,11 @@
         {
           "properties": {
             "method": {
-              "const": "pane.move_tab",
+              "const": "pane.stack_move",
               "type": "string"
             },
             "params": {
-              "$ref": "#/schemas/request/$defs/PaneMoveTabParams"
+              "$ref": "#/schemas/request/$defs/PaneStackMoveParams"
             }
           },
           "required": [
@@ -6532,11 +6532,11 @@
         {
           "properties": {
             "method": {
-              "const": "pane.split_tab",
+              "const": "pane.stack_split",
               "type": "string"
             },
             "params": {
-              "$ref": "#/schemas/request/$defs/PaneSplitTabParams"
+              "$ref": "#/schemas/request/$defs/PaneStackSplitParams"
             }
           },
           "required": [
@@ -7932,8 +7932,8 @@
           "oneOf": [
             {
               "properties": {
-                "active_tab": {
-                  "description": "The tab the tile shows: 0 for `pane`, then `tabs` in order.",
+                "active": {
+                  "description": "The pane the tile shows: 0 for `pane`, then `stack` in order.",
                   "format": "uint",
                   "minimum": 0,
                   "type": "integer"
@@ -7971,8 +7971,8 @@
                     "null"
                   ]
                 },
-                "tabs": {
-                  "description": "The tile's other tabs, in order after `pane`.",
+                "stack": {
+                  "description": "The stack's other panes, in order after `pane`.",
                   "items": {
                     "$ref": "#/schemas/success_response/$defs/LayoutPane"
                   },
@@ -8191,7 +8191,7 @@
               ]
             },
             "hidden": {
-              "description": "Behind another tab of its tile.",
+              "description": "Behind another pane of its stack.",
               "type": "boolean"
             },
             "label": {
@@ -8225,7 +8225,7 @@
               ]
             },
             "stack_id": {
-              "description": "Tile holding this pane, valid until the server restarts. Panes sharing a\ntile are its tabs, and pane lists give them in tab order.",
+              "description": "Stack holding this pane, valid until the server restarts. Panes sharing a\nstack share a tile, and pane lists give them in stack order.",
               "type": [
                 "string",
                 "null"

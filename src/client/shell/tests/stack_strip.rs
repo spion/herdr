@@ -52,12 +52,12 @@ fn tile_strip_lists_its_tabs_and_routes_clicks_to_the_pane_api() {
     let frame = state.compose(106, 20).expect("composed frame");
     let tabs: Vec<_> = state
         .hits
-        .stack_tabs
+        .stack_panes
         .iter()
         .map(|(_, pane_id)| pane_id.as_str())
         .collect();
     assert_eq!(tabs, ["pane_1", "pane_2"]);
-    let strip_row = state.hits.stack_tabs[0].0.y as usize;
+    let strip_row = state.hits.stack_panes[0].0.y as usize;
     let row: String = frame.cells[strip_row * frame.width as usize..][..frame.width as usize]
         .iter()
         .map(|cell| cell.symbol.as_str())
@@ -67,7 +67,7 @@ fn tile_strip_lists_its_tabs_and_routes_clicks_to_the_pane_api() {
         "row: {row:?}"
     );
 
-    let logs = state.hits.stack_tabs[1].0;
+    let logs = state.hits.stack_panes[1].0;
     let select = click(&mut state, logs);
     let [ClientShellAction::Endpoint { request, .. }] = &select.actions[..] else {
         panic!("expected one endpoint action: {:?}", select.actions);
@@ -77,14 +77,14 @@ fn tile_strip_lists_its_tabs_and_routes_clicks_to_the_pane_api() {
         crate::api::schema::Method::PaneFocus(target) if target.pane_id == "pane_2"
     ));
 
-    let new_tab = state.hits.new_stack_tabs[0].0;
+    let new_tab = state.hits.new_stack_panes[0].0;
     let add = click(&mut state, new_tab);
     let [ClientShellAction::Endpoint { request, .. }] = &add.actions[..] else {
         panic!("expected one endpoint action: {:?}", add.actions);
     };
     assert!(matches!(
         &request.method,
-        crate::api::schema::Method::PaneAddTab(params) if params.pane_id == "pane_1" && params.focus
+        crate::api::schema::Method::PaneStackAdd(params) if params.pane_id == "pane_1" && params.focus
     ));
 }
 
@@ -110,7 +110,7 @@ fn drag_logs_tab_to(drop: impl Fn(&ClientShellState) -> (u16, u16)) -> crate::ap
     state.set_pane_surface(surface);
     state.compose(106, 20).expect("composed frame");
 
-    let logs = state.hits.stack_tabs[1].0;
+    let logs = state.hits.stack_panes[1].0;
     click(&mut state, logs);
     let target = drop(&state);
     mouse(&mut state, MouseEventKind::Drag(MouseButton::Left), target);
@@ -125,12 +125,12 @@ fn drag_logs_tab_to(drop: impl Fn(&ClientShellState) -> (u16, u16)) -> crate::ap
 #[test]
 fn dragging_a_tab_onto_its_strip_reorders_it() {
     let method = drag_logs_tab_to(|state| {
-        let agent = state.hits.stack_tabs[0].0;
+        let agent = state.hits.stack_panes[0].0;
         (agent.x, agent.y)
     });
     assert!(matches!(
         method,
-        crate::api::schema::Method::PaneMoveTab(params)
+        crate::api::schema::Method::PaneStackMove(params)
             if params.pane_id == "pane_2" && params.index == 0
     ));
 }
@@ -143,7 +143,7 @@ fn dragging_a_tab_onto_a_tile_edge_splits_it_out() {
     });
     assert!(matches!(
         method,
-        crate::api::schema::Method::PaneSplitTab(params)
+        crate::api::schema::Method::PaneStackSplit(params)
             if params.pane_id == "pane_2"
                 && params.side == crate::api::schema::PaneDirection::Right
     ));
@@ -166,7 +166,7 @@ fn only_a_tab_with_siblings_offers_to_split_out() {
             .map(|item| item.label)
             .collect::<Vec<_>>()
     };
-    let logs = state.hits.stack_tabs[1].0;
+    let logs = state.hits.stack_panes[1].0;
     mouse(
         &mut state,
         MouseEventKind::Down(MouseButton::Right),
@@ -176,7 +176,7 @@ fn only_a_tab_with_siblings_offers_to_split_out() {
 
     snapshot.panes.truncate(1);
     state.set_snapshot(Box::new(snapshot));
-    state.open_stack_tab_context_menu("pane_1".into(), 0, 0);
+    state.open_stack_pane_context_menu("pane_1".into(), 0, 0);
     assert!(!labels(&state).contains(&"Split right"));
 }
 
@@ -188,13 +188,13 @@ fn single_tab_tiles_and_old_servers_show_no_strip() {
     state.set_snapshot(Box::new(snapshot.clone()));
     state.set_pane_surface(surface.clone());
     state.compose(106, 20).expect("composed frame");
-    assert!(state.hits.stack_tabs.is_empty());
-    assert_eq!(state.hits.new_stack_tabs.len(), 1, "focused tile offers +");
+    assert!(state.hits.stack_panes.is_empty());
+    assert_eq!(state.hits.new_stack_panes.len(), 1, "focused tile offers +");
 
     snapshot.panes[0].stack_id = None;
     state.set_snapshot(Box::new(snapshot));
     state.set_pane_surface(surface);
     state.compose(106, 20).expect("composed frame");
-    assert!(state.hits.stack_tabs.is_empty());
-    assert!(state.hits.new_stack_tabs.is_empty());
+    assert!(state.hits.stack_panes.is_empty());
+    assert!(state.hits.new_stack_panes.is_empty());
 }

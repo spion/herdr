@@ -140,7 +140,7 @@ pub(crate) fn to_pane() -> Input<Option<String>> {
         *slot = Some(crate::cli::normalize_pane_id(value));
         Ok(())
     })
-    .help("Move into the tile holding this pane")
+    .help("Move into the stack holding this pane")
 }
 
 pub(crate) fn index() -> Input<usize> {
@@ -151,7 +151,7 @@ pub(crate) fn index() -> Input<usize> {
         Ok(())
     })
     .required()
-    .help("Tab position in the tile, starting at 0")
+    .help("Position in the stack, starting at 0")
 }
 
 pub(crate) fn finite(name: &'static str) -> Input<Option<f32>> {
@@ -439,7 +439,7 @@ impl Leaf {
     pub(super) fn command(&self) -> Command {
         let command = projection::command(self.name, (self.arguments)()).about(self.about);
         match self.name {
-            "input" | "add-tab" | "move-tab" => command.group(clap::ArgGroup::new("selector").args(["pane_id", "pane", "current"]).required(true)),
+            "input" | "stack-add" | "stack-move" => command.group(clap::ArgGroup::new("selector").args(["pane_id", "pane", "current"]).required(true)),
             "move" => command.group(clap::ArgGroup::new("destination").args(["tab", "new-tab", "new-workspace"]).required(true)),
             "send-text" => command.after_help("next: herdr pane run <PANE_ID> <COMMAND> sends text and Enter in one call"),
             "send-keys" => command.after_help("Use esc as the canonical Escape key name; escape is also accepted."),
@@ -681,27 +681,27 @@ pub(super) const LEAVES: &[Leaf] = &[
         },
     },
     Leaf {
-        name: "add-tab",
-        about: "Open a pane as a new tab in a pane's tile",
-        id: "cli:pane:add-tab",
+        name: "stack-add",
+        about: "Add a new pane to a pane's stack",
+        id: "cli:pane:stack-add",
         output: Output::Json,
-        arguments: PaneAddTabProjection::arguments,
+        arguments: PaneStackAddProjection::arguments,
         method: |matches| {
-            let mut params = PaneAddTabProjection::from_matches(matches)?;
+            let mut params = PaneStackAddProjection::from_matches(matches)?;
             params.pane_id = super::selected_pane(matches, params.pane_id)?;
-            Ok(Method::PaneAddTab(params))
+            Ok(Method::PaneStackAdd(params))
         },
     },
     Leaf {
-        name: "move-tab",
-        about: "Reorder a tab or move it into another tile",
-        id: "cli:pane:move-tab",
+        name: "stack-move",
+        about: "Reorder a pane in its stack or move it to another stack",
+        id: "cli:pane:stack-move",
         output: Output::Json,
-        arguments: PaneMoveTabProjection::arguments,
+        arguments: PaneStackMoveProjection::arguments,
         method: |matches| {
-            let mut params = PaneMoveTabProjection::from_matches(matches)?;
+            let mut params = PaneStackMoveProjection::from_matches(matches)?;
             params.pane_id = super::selected_pane(matches, params.pane_id)?;
-            Ok(Method::PaneMoveTab(params))
+            Ok(Method::PaneStackMove(params))
         },
     },
     Leaf {

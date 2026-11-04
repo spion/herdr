@@ -1,20 +1,21 @@
 use bytes::Bytes;
 
 use crate::api::schema::{
-    EventData, EventEnvelope, EventKind, PaneAddTabParams, PaneClearAgentAuthorityParams,
-    PaneCopyMotion, PaneCopyMotionParams, PaneCopySearchDirection, PaneCopySearchParams,
-    PaneCreateParams, PaneCurrentParams, PaneDirection, PaneEdgesParams, PaneEdgesResult,
-    PaneFocusDirectionParams, PaneFocusDirectionReason, PaneFocusDirectionResult, PaneInfo,
-    PaneInputSetParams, PaneLayoutPane, PaneLayoutParams, PaneLayoutRect, PaneLayoutSnapshot,
-    PaneLayoutSplit, PaneListParams, PaneMoveDestination, PaneMoveParams, PaneMoveReason,
-    PaneMoveResult, PaneMoveTabParams, PaneNeighborParams, PaneNeighborResult, PaneProcessInfo,
-    PaneProcessInfoParams, PaneProcessInfoProcess, PaneReadParams, PaneReadResult,
-    PaneReleaseAgentParams, PaneRenameParams, PaneReportAgentParams, PaneReportAgentSessionParams,
+    EventData, EventEnvelope, EventKind, PaneClearAgentAuthorityParams, PaneCopyMotion,
+    PaneCopyMotionParams, PaneCopySearchDirection, PaneCopySearchParams, PaneCreateParams,
+    PaneCurrentParams, PaneDirection, PaneEdgesParams, PaneEdgesResult, PaneFocusDirectionParams,
+    PaneFocusDirectionReason, PaneFocusDirectionResult, PaneInfo, PaneInputSetParams,
+    PaneLayoutPane, PaneLayoutParams, PaneLayoutRect, PaneLayoutSnapshot, PaneLayoutSplit,
+    PaneListParams, PaneMoveDestination, PaneMoveParams, PaneMoveReason, PaneMoveResult,
+    PaneNeighborParams, PaneNeighborResult, PaneProcessInfo, PaneProcessInfoParams,
+    PaneProcessInfoProcess, PaneReadParams, PaneReadResult, PaneReleaseAgentParams,
+    PaneRenameParams, PaneReportAgentParams, PaneReportAgentSessionParams,
     PaneReportMetadataParams, PaneResizeParams, PaneResizeReason, PaneResizeResult,
     PaneScrollParams, PaneSelectionReadParams, PaneSendInputParams, PaneSendKeysParams,
-    PaneSendTextParams, PaneSplitParams, PaneSplitTabParams, PaneSwapParams, PaneSwapReason,
-    PaneSwapResult, PaneTarget, PaneTextPoint, PaneTextRange, PaneZoomMode, PaneZoomParams,
-    PaneZoomReason, PaneZoomResult, ResponseResult,
+    PaneSendTextParams, PaneSplitParams, PaneStackAddParams, PaneStackMoveParams,
+    PaneStackSplitParams, PaneSwapParams, PaneSwapReason, PaneSwapResult, PaneTarget,
+    PaneTextPoint, PaneTextRange, PaneZoomMode, PaneZoomParams, PaneZoomReason, PaneZoomResult,
+    ResponseResult,
 };
 use crate::app::actions::{PaneZoomCommand, PaneZoomNoopReason};
 use crate::app::App;
@@ -127,12 +128,16 @@ impl App {
         encode_success(id, ResponseResult::PaneInfo { pane })
     }
 
-    pub(super) fn handle_pane_add_tab(&mut self, id: String, params: PaneAddTabParams) -> String {
+    pub(super) fn handle_pane_stack_add(
+        &mut self,
+        id: String,
+        params: PaneStackAddParams,
+    ) -> String {
         let Some((ws_idx, target_pane_id)) = self.parse_pane_id(&params.pane_id) else {
             return pane_not_found(id, &params.pane_id);
         };
         let previous_focus = self.state.current_pane_focus_target();
-        let (tab_idx, new_pane) = match self.spawn_tab(
+        let (tab_idx, new_pane) = match self.spawn_in_stack(
             ws_idx,
             target_pane_id,
             target_pane_id,
@@ -141,7 +146,7 @@ impl App {
             Vec::new(),
         ) {
             Some(Ok(spawned)) => spawned,
-            Some(Err(err)) => return encode_error(id, "pane_add_tab_failed", err.to_string()),
+            Some(Err(err)) => return encode_error(id, "pane_stack_add_failed", err.to_string()),
             None => return pane_not_found(id, &params.pane_id),
         };
         let pane = self.adopt_new_pane(ws_idx, tab_idx, new_pane, params.focus, previous_focus);
@@ -200,7 +205,7 @@ impl App {
         };
         let previous_focus = self.state.current_pane_focus_target();
         let (tab_idx, new_pane) =
-            match self.spawn_tab(ws_idx, tile, caller, params.cwd, params.focus, extra_env) {
+            match self.spawn_in_stack(ws_idx, tile, caller, params.cwd, params.focus, extra_env) {
                 Some(Ok(spawned)) => spawned,
                 Some(Err(err)) => return encode_error(id, "pane_create_failed", err.to_string()),
                 None => return encode_error(id, "pane_not_found", "pane not found"),
@@ -217,7 +222,7 @@ impl App {
     /// Spawn a shell as a new tab in the tile holding `tile_pane`, starting in
     /// `cwd`, else in the directory `cwd_pane` works in. None when `tile_pane`
     /// is gone.
-    fn spawn_tab(
+    fn spawn_in_stack(
         &mut self,
         ws_idx: usize,
         tile_pane: PaneId,
@@ -241,7 +246,7 @@ impl App {
         let host_terminal_theme = self.state.host_terminal_theme;
         let host_terminal_appearance = self.pane_host_terminal_appearance();
         let shell_config = crate::pane::PaneShellConfig::new(&default_shell, self.state.shell_mode);
-        self.state.workspaces.get_mut(ws_idx)?.add_tab_pane(
+        self.state.workspaces.get_mut(ws_idx)?.add_stack_pane(
             tile_pane,
             rows,
             cols,
@@ -255,7 +260,11 @@ impl App {
         )
     }
 
-    pub(super) fn handle_pane_move_tab(&mut self, id: String, params: PaneMoveTabParams) -> String {
+    pub(super) fn handle_pane_stack_move(
+        &mut self,
+        id: String,
+        params: PaneStackMoveParams,
+    ) -> String {
         let Some((ws_idx, pane_id)) = self.parse_pane_id(&params.pane_id) else {
             return pane_not_found(id, &params.pane_id);
         };
@@ -271,7 +280,11 @@ impl App {
             return pane_not_found(id, &params.pane_id);
         };
         if ws.find_tab_index_for_pane(target_pane_id) != Some(tab_idx) {
-            return encode_error(id, "invalid_pane_move_tab", "target pane is in another tab");
+            return encode_error(
+                id,
+                "invalid_pane_stack_move",
+                "target pane is in another tab",
+            );
         }
         let previous_focus = self.state.current_pane_focus_target();
         let layout = &mut self.state.workspaces[ws_idx].tabs[tab_idx].layout;
@@ -292,10 +305,10 @@ impl App {
         encode_success(id, ResponseResult::Ok {})
     }
 
-    pub(super) fn handle_pane_split_tab(
+    pub(super) fn handle_pane_stack_split(
         &mut self,
         id: String,
-        params: PaneSplitTabParams,
+        params: PaneStackSplitParams,
     ) -> String {
         let Some((ws_idx, pane_id)) = self.parse_pane_id(&params.pane_id) else {
             return pane_not_found(id, &params.pane_id);
@@ -314,7 +327,7 @@ impl App {
         if ws.find_tab_index_for_pane(target_pane_id) != Some(tab_idx) {
             return encode_error(
                 id,
-                "invalid_pane_split_tab",
+                "invalid_pane_stack_split",
                 "target pane is in another tab",
             );
         }
@@ -323,7 +336,7 @@ impl App {
             .layout
             .split_out(pane_id, target_pane_id, params.side.into());
         if !moved {
-            return encode_error(id, "invalid_pane_split_tab", "tile has no other tab");
+            return encode_error(id, "invalid_pane_stack_split", "stack has no other pane");
         }
         self.state
             .record_pane_focus_change(previous_focus, ws_idx, pane_id);
@@ -3411,7 +3424,7 @@ mod tests {
     }
 
     #[test]
-    fn api_pane_split_tab_moves_a_tab_into_a_new_tile_on_that_side() {
+    fn api_pane_stack_split_moves_a_pane_into_a_new_tile_on_that_side() {
         let (mut app, _) = app_with_test_workspace();
         let agent = app.state.workspaces[0].tabs[0].root_pane;
         let logs = app.state.workspaces[0].test_split(ratatui::layout::Direction::Horizontal);
@@ -3420,9 +3433,9 @@ mod tests {
         layout.move_to_stack(logs, stack, None, false);
         let logs_public = app.public_pane_id(0, logs).unwrap();
 
-        let response = app.handle_pane_split_tab(
+        let response = app.handle_pane_stack_split(
             "req".into(),
-            PaneSplitTabParams {
+            PaneStackSplitParams {
                 pane_id: logs_public,
                 target_pane_id: None,
                 side: PaneDirection::Left,
@@ -3439,16 +3452,16 @@ mod tests {
         assert_eq!(shown[0].id, logs, "the left side comes first");
         assert_eq!(shown[1].id, agent);
 
-        let response = app.handle_pane_split_tab(
+        let response = app.handle_pane_stack_split(
             "req".into(),
-            PaneSplitTabParams {
+            PaneStackSplitParams {
                 pane_id: app.public_pane_id(0, logs).unwrap(),
                 target_pane_id: None,
                 side: PaneDirection::Right,
             },
         );
         let error: serde_json::Value = serde_json::from_str(&response).unwrap();
-        assert_eq!(error["error"]["code"], "invalid_pane_split_tab");
+        assert_eq!(error["error"]["code"], "invalid_pane_stack_split");
     }
 
     /// Business rule: scripts and agents keep working from a background tab, so
@@ -3460,7 +3473,7 @@ mod tests {
         let logs = app.state.workspaces[0].test_split(ratatui::layout::Direction::Horizontal);
         let layout = &mut app.state.workspaces[0].tabs[0].layout;
         let stack = layout.stack_of(logs).unwrap().id();
-        let hidden = layout.add_tab(stack, None, false).unwrap();
+        let hidden = layout.add_to_stack(stack, None, false).unwrap();
         app.state.view.terminal_area = ratatui::layout::Rect::new(0, 0, 100, 20);
 
         assert_eq!(
@@ -3470,16 +3483,16 @@ mod tests {
     }
 
     #[test]
-    fn api_pane_move_tab_joins_another_tile_and_reorders_within_it() {
+    fn api_pane_stack_move_joins_another_tile_and_reorders_within_it() {
         let (mut app, _) = app_with_test_workspace();
         let agent = app.state.workspaces[0].tabs[0].root_pane;
         let logs = app.state.workspaces[0].test_split(ratatui::layout::Direction::Horizontal);
         let agent_public = app.public_pane_id(0, agent).unwrap();
         let logs_public = app.public_pane_id(0, logs).unwrap();
 
-        let response = app.handle_pane_move_tab(
+        let response = app.handle_pane_stack_move(
             "req".into(),
-            PaneMoveTabParams {
+            PaneStackMoveParams {
                 pane_id: logs_public.clone(),
                 target_pane_id: Some(agent_public),
                 index: 0,
@@ -3498,9 +3511,9 @@ mod tests {
         );
         assert!(!layout.is_shown(agent));
 
-        app.handle_pane_move_tab(
+        app.handle_pane_stack_move(
             "req".into(),
-            PaneMoveTabParams {
+            PaneStackMoveParams {
                 pane_id: logs_public,
                 target_pane_id: None,
                 index: 1,

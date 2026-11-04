@@ -16,7 +16,7 @@
 //! marks are lines rather than a wash over the pane's content.
 
 use super::*;
-use crate::api::schema::{Method, PaneDirection, PaneMoveTabParams, PaneSplitTabParams};
+use crate::api::schema::{Method, PaneDirection, PaneStackMoveParams, PaneStackSplitParams};
 use crate::protocol::{CellData, ClientShellPane};
 
 const MAX_LABEL_WIDTH: usize = 24;
@@ -71,7 +71,7 @@ pub(in crate::client::shell) fn render_stack_strips(
     panes: &[PaneHit],
     snapshot: &ClientShellSnapshot,
     config: &ClientShellConfig,
-    drop: Option<&StackTabDrop>,
+    drop: Option<&StackPaneDrop>,
 ) -> StackStrips {
     let mut strips = StackStrips::default();
     for hit in panes.iter().filter(|hit| !hit.popup) {
@@ -86,7 +86,7 @@ pub(in crate::client::shell) fn render_stack_strips(
         else {
             continue;
         };
-        let tabs = tabs_of_tile(snapshot, &hit.pane_id);
+        let tabs = panes_of_stack(snapshot, &hit.pane_id);
         if tabs.is_empty() {
             continue;
         }
@@ -119,7 +119,7 @@ pub(in crate::client::shell) fn render_stack_strips(
 
 /// The panes of the tile holding `pane_id`, in tab order. Empty when the
 /// server does not report tiles.
-pub(in crate::client::shell) fn tabs_of_tile<'a>(
+pub(in crate::client::shell) fn panes_of_stack<'a>(
     snapshot: &'a ClientShellSnapshot,
     pane_id: &str,
 ) -> Vec<&'a ClientShellPane> {
@@ -136,17 +136,17 @@ pub(in crate::client::shell) fn tabs_of_tile<'a>(
 }
 
 pub(in crate::client::shell) fn drop_at(
-    stack_tabs: &[(Rect, String)],
+    stack_panes: &[(Rect, String)],
     panes: &[PaneHit],
     snapshot: &ClientShellSnapshot,
     dragged: &str,
     point: (u16, u16),
-) -> Option<StackTabDrop> {
-    if let Some((rect, pane_id)) = stack_tabs.iter().find(|(rect, _)| contains(*rect, point)) {
-        let tabs = tabs_of_tile(snapshot, pane_id);
+) -> Option<StackPaneDrop> {
+    if let Some((rect, pane_id)) = stack_panes.iter().find(|(rect, _)| contains(*rect, point)) {
+        let tabs = panes_of_stack(snapshot, pane_id);
         let position = tabs.iter().position(|tab| tab.pane_id == *pane_id)?;
         let past_middle = point.0 >= rect.x + rect.width / 2;
-        return Some(StackTabDrop::Tile {
+        return Some(StackPaneDrop::Tile {
             pane_id: pane_id.clone(),
             index: position + usize::from(past_middle),
         });
@@ -154,14 +154,14 @@ pub(in crate::client::shell) fn drop_at(
     let hit = panes
         .iter()
         .find(|hit| !hit.popup && contains(hit.rect, point))?;
-    let tabs = tabs_of_tile(snapshot, &hit.pane_id);
+    let tabs = panes_of_stack(snapshot, &hit.pane_id);
     if tabs.iter().all(|tab| tab.pane_id == dragged) {
         return None;
     }
     let pane_id = hit.pane_id.clone();
     match edge_side(hit.rect, point).filter(|_| point.1 != hit.rect.y) {
-        Some(side) => Some(StackTabDrop::Edge { pane_id, side }),
-        None => Some(StackTabDrop::Tile {
+        Some(side) => Some(StackPaneDrop::Edge { pane_id, side }),
+        None => Some(StackPaneDrop::Tile {
             pane_id,
             index: tabs.len(),
         }),
@@ -194,16 +194,18 @@ fn edge_side(rect: Rect, (x, y): (u16, u16)) -> Option<PaneDirection> {
 pub(in crate::client::shell) fn drop_request(
     snapshot: &ClientShellSnapshot,
     dragged: String,
-    drop: StackTabDrop,
+    drop: StackPaneDrop,
 ) -> Option<Method> {
     match drop {
-        StackTabDrop::Edge { pane_id, side } => Some(Method::PaneSplitTab(PaneSplitTabParams {
-            pane_id: dragged,
-            target_pane_id: Some(pane_id),
-            side,
-        })),
-        StackTabDrop::Tile { pane_id, index } => {
-            let from = tabs_of_tile(snapshot, &pane_id)
+        StackPaneDrop::Edge { pane_id, side } => {
+            Some(Method::PaneStackSplit(PaneStackSplitParams {
+                pane_id: dragged,
+                target_pane_id: Some(pane_id),
+                side,
+            }))
+        }
+        StackPaneDrop::Tile { pane_id, index } => {
+            let from = panes_of_stack(snapshot, &pane_id)
                 .iter()
                 .position(|tab| tab.pane_id == dragged);
             // `index` counts the dragged tab, which leaves its slot first.
@@ -212,7 +214,7 @@ pub(in crate::client::shell) fn drop_request(
                 Some(from) if from < index => index - 1,
                 _ => index,
             };
-            Some(Method::PaneMoveTab(PaneMoveTabParams {
+            Some(Method::PaneStackMove(PaneStackMoveParams {
                 pane_id: dragged,
                 target_pane_id: Some(pane_id),
                 index,
@@ -222,7 +224,7 @@ pub(in crate::client::shell) fn drop_request(
 }
 
 fn drop_marks(
-    drop: &StackTabDrop,
+    drop: &StackPaneDrop,
     panes: &[PaneHit],
     snapshot: &ClientShellSnapshot,
     entries: &[(Rect, String)],
@@ -234,11 +236,11 @@ fn drop_marks(
             .map(|hit| hit.rect)
     };
     match drop {
-        StackTabDrop::Edge { pane_id, side } => tile(pane_id)
+        StackPaneDrop::Edge { pane_id, side } => tile(pane_id)
             .map(|rect| outline(half_toward(rect, *side)))
             .unwrap_or_default(),
-        StackTabDrop::Tile { pane_id, index } => {
-            let tabs = tabs_of_tile(snapshot, pane_id);
+        StackPaneDrop::Tile { pane_id, index } => {
+            let tabs = panes_of_stack(snapshot, pane_id);
             let entry = |position: usize| {
                 let tab = tabs.get(position)?;
                 let (rect, _) = entries.iter().find(|(_, id)| *id == tab.pane_id)?;

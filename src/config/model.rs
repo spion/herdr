@@ -405,19 +405,19 @@ pub struct KeysConfig {
     pub switch_workspace: BindingConfig,
     /// Close the active workspace tab. Unset by default.
     pub close_tab: BindingConfig,
-    /// Open a new tab in the focused tile. Default: "prefix+c".
-    pub new_stack_tab: BindingConfig,
-    /// Show the focused tile's previous tab. Default: "prefix+p".
-    pub previous_stack_tab: BindingConfig,
-    /// Show the focused tile's next tab. Default: "prefix+n".
-    pub next_stack_tab: BindingConfig,
-    /// Move the focused tile's tab one position toward the front. Unset by default.
-    pub move_stack_tab_previous: BindingConfig,
-    /// Move the focused tile's tab one position toward the back. Unset by default.
-    pub move_stack_tab_next: BindingConfig,
-    /// Show tab 1-9 of the focused tile. Default: "prefix+1..9".
-    pub switch_stack_tab: BindingConfig,
-    /// Rename the focused pane, which is the focused tile's tab. Default: ["prefix+shift+p", "prefix+shift+t"].
+    /// Open a new pane in the focused stack. Default: "prefix+c".
+    pub new_stack_pane: BindingConfig,
+    /// Show the previous pane of the focused stack. Default: "prefix+p".
+    pub previous_stack_pane: BindingConfig,
+    /// Show the next pane of the focused stack. Default: "prefix+n".
+    pub next_stack_pane: BindingConfig,
+    /// Move the focused pane one position in its stack, toward the front. Unset by default.
+    pub move_stack_pane_previous: BindingConfig,
+    /// Move the focused pane one position in its stack, toward the back. Unset by default.
+    pub move_stack_pane_next: BindingConfig,
+    /// Show pane 1-9 of the focused stack. Default: "prefix+1..9".
+    pub switch_stack_pane: BindingConfig,
+    /// Rename the focused pane. Default: ["prefix+shift+p", "prefix+shift+t"].
     pub rename_pane: BindingConfig,
     /// Open the focused pane scrollback in $EDITOR. Default: "prefix+e".
     pub edit_scrollback: BindingConfig,
@@ -450,7 +450,7 @@ pub struct KeysConfig {
     pub split_vertical: BindingConfig,
     /// Split pane horizontally (stacked). Default: "prefix+minus"
     pub split_horizontal: BindingConfig,
-    /// Close the focused pane, which is the focused tile's tab. Default: ["prefix+x", "prefix+shift+x"].
+    /// Close the focused pane. Default: ["prefix+x", "prefix+shift+x"].
     pub close_pane: BindingConfig,
     /// Toggle zoom for the focused pane. Default: "prefix+z"
     #[serde(alias = "fullscreen")]
@@ -555,17 +555,17 @@ pub(crate) struct KeysConfigOverlay {
     #[serde(skip_serializing_if = "Option::is_none")]
     close_tab: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    new_stack_tab: Option<BindingConfig>,
+    new_stack_pane: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    previous_stack_tab: Option<BindingConfig>,
+    previous_stack_pane: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    next_stack_tab: Option<BindingConfig>,
+    next_stack_pane: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    move_stack_tab_previous: Option<BindingConfig>,
+    move_stack_pane_previous: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    move_stack_tab_next: Option<BindingConfig>,
+    move_stack_pane_next: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    switch_stack_tab: Option<BindingConfig>,
+    switch_stack_pane: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     rename_pane: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -702,12 +702,12 @@ impl<'de> Deserialize<'de> for KeysConfig {
         apply_field!(switch_tab);
         apply_field!(switch_workspace);
         apply_field!(close_tab);
-        apply_field!(new_stack_tab);
-        apply_field!(previous_stack_tab);
-        apply_field!(next_stack_tab);
-        apply_field!(move_stack_tab_previous);
-        apply_field!(move_stack_tab_next);
-        apply_field!(switch_stack_tab);
+        apply_field!(new_stack_pane);
+        apply_field!(previous_stack_pane);
+        apply_field!(next_stack_pane);
+        apply_field!(move_stack_pane_previous);
+        apply_field!(move_stack_pane_next);
+        apply_field!(switch_stack_pane);
         apply_field!(rename_pane);
         apply_field!(edit_scrollback);
         apply_field!(clear_pane);
@@ -813,12 +813,12 @@ impl KeysConfig {
         copy_effective_indexed_field!(switch_tab, keybinds.switch_tab);
         copy_effective_indexed_field!(switch_workspace, keybinds.switch_workspace);
         copy_effective_action_field!(close_tab, keybinds.close_tab);
-        copy_effective_action_field!(new_stack_tab, keybinds.new_stack_tab);
-        copy_effective_action_field!(previous_stack_tab, keybinds.previous_stack_tab);
-        copy_effective_action_field!(next_stack_tab, keybinds.next_stack_tab);
-        copy_effective_action_field!(move_stack_tab_previous, keybinds.move_stack_tab_previous);
-        copy_effective_action_field!(move_stack_tab_next, keybinds.move_stack_tab_next);
-        copy_effective_indexed_field!(switch_stack_tab, keybinds.switch_stack_tab);
+        copy_effective_action_field!(new_stack_pane, keybinds.new_stack_pane);
+        copy_effective_action_field!(previous_stack_pane, keybinds.previous_stack_pane);
+        copy_effective_action_field!(next_stack_pane, keybinds.next_stack_pane);
+        copy_effective_action_field!(move_stack_pane_previous, keybinds.move_stack_pane_previous);
+        copy_effective_action_field!(move_stack_pane_next, keybinds.move_stack_pane_next);
+        copy_effective_indexed_field!(switch_stack_pane, keybinds.switch_stack_pane);
         copy_effective_action_field!(rename_pane, keybinds.rename_pane);
         copy_effective_action_field!(edit_scrollback, keybinds.edit_scrollback);
         copy_effective_action_field!(clear_pane, keybinds.clear_pane);
@@ -1191,12 +1191,12 @@ impl Default for KeysConfig {
             switch_tab: BindingConfig::empty(),
             switch_workspace: BindingConfig::empty(),
             close_tab: BindingConfig::empty(),
-            new_stack_tab: BindingConfig::one("prefix+c"),
-            previous_stack_tab: BindingConfig::one("prefix+p"),
-            next_stack_tab: BindingConfig::one("prefix+n"),
-            move_stack_tab_previous: BindingConfig::empty(),
-            move_stack_tab_next: BindingConfig::empty(),
-            switch_stack_tab: BindingConfig::one("prefix+1..9"),
+            new_stack_pane: BindingConfig::one("prefix+c"),
+            previous_stack_pane: BindingConfig::one("prefix+p"),
+            next_stack_pane: BindingConfig::one("prefix+n"),
+            move_stack_pane_previous: BindingConfig::empty(),
+            move_stack_pane_next: BindingConfig::empty(),
+            switch_stack_pane: BindingConfig::one("prefix+1..9"),
             rename_pane: BindingConfig::Many(vec![
                 "prefix+shift+p".into(),
                 "prefix+shift+t".into(),

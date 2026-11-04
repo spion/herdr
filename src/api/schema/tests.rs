@@ -1075,8 +1075,8 @@ fn layout_export_apply_round_trip() {
                 cwd: Some("/repo".into()),
                 ..Default::default()
             },
-            tabs: Vec::new(),
-            active_tab: 0,
+            stack: Vec::new(),
+            active: 0,
         }),
         second: Box::new(LayoutNode::Pane {
             pane: LayoutPane {
@@ -1085,8 +1085,8 @@ fn layout_export_apply_round_trip() {
                 env: HashMap::from([("HERDR_ROLE".into(), "tests".into())]),
                 ..Default::default()
             },
-            tabs: Vec::new(),
-            active_tab: 0,
+            stack: Vec::new(),
+            active: 0,
         }),
     };
 
@@ -1146,8 +1146,8 @@ fn layout_export_apply_round_trip() {
                         pane_id: Some("w1-1".into()),
                         ..Default::default()
                     },
-                    tabs: Vec::new(),
-                    active_tab: 0,
+                    stack: Vec::new(),
+                    active: 0,
                 },
             },
         },

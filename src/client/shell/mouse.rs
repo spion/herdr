@@ -681,9 +681,9 @@ impl ClientShellState {
     /// Hit-test order determines which overlapping control receives the event;
     /// the sidebar toggle takes precedence over the agent scrollbar beneath it.
     /// Where the tile tab `dragged` would land if dropped at `point`.
-    fn stack_tab_drop_at(&self, dragged: &str, point: (u16, u16)) -> Option<StackTabDrop> {
+    fn stack_pane_drop_at(&self, dragged: &str, point: (u16, u16)) -> Option<StackPaneDrop> {
         render::stack_strip::drop_at(
-            &self.hits.stack_tabs,
+            &self.hits.stack_panes,
             &self.hits.panes,
             self.snapshot.as_deref()?,
             dragged,
@@ -693,17 +693,17 @@ impl ClientShellState {
 
     /// The request for a left click on a tile's tab strip, if it hit one.
     fn stack_strip_click(&self, point: (u16, u16)) -> Option<crate::api::schema::Method> {
-        use crate::api::schema::{Method, PaneAddTabParams, PaneTarget};
+        use crate::api::schema::{Method, PaneStackAddParams, PaneTarget};
         let hit = |hits: &[(Rect, String)]| {
             hits.iter()
                 .find(|(rect, _)| super::contains(*rect, point))
                 .map(|(_, pane_id)| pane_id.clone())
         };
-        if let Some(pane_id) = hit(&self.hits.stack_tabs) {
+        if let Some(pane_id) = hit(&self.hits.stack_panes) {
             return Some(Method::PaneFocus(PaneTarget { pane_id }));
         }
-        hit(&self.hits.new_stack_tabs).map(|pane_id| {
-            Method::PaneAddTab(PaneAddTabParams {
+        hit(&self.hits.new_stack_panes).map(|pane_id| {
+            Method::PaneStackAdd(PaneStackAddParams {
                 pane_id,
                 cwd: None,
                 focus: true,
@@ -1235,9 +1235,9 @@ impl ClientShellState {
                     outcome.repaint = true;
                     return;
                 }
-                Some(ClientChromeDrag::StackTab { pane_id, .. }) => {
-                    let drop = self.stack_tab_drop_at(&pane_id.clone(), point);
-                    if let Some(ClientChromeDrag::StackTab { drop: current, .. }) =
+                Some(ClientChromeDrag::StackPane { pane_id, .. }) => {
+                    let drop = self.stack_pane_drop_at(&pane_id.clone(), point);
+                    if let Some(ClientChromeDrag::StackPane { drop: current, .. }) =
                         self.chrome_drag.as_mut()
                     {
                         *current = drop;
@@ -1278,16 +1278,16 @@ impl ClientShellState {
                 }
                 return;
             }
-            if let Some(press) = self.stack_tab_press.take() {
+            if let Some(press) = self.stack_pane_press.take() {
                 if mouse.column != press.start_column || mouse.row != press.start_row {
-                    let drop = self.stack_tab_drop_at(&press.pane_id, point);
-                    self.chrome_drag = Some(ClientChromeDrag::StackTab {
+                    let drop = self.stack_pane_drop_at(&press.pane_id, point);
+                    self.chrome_drag = Some(ClientChromeDrag::StackPane {
                         pane_id: press.pane_id,
                         drop,
                     });
                     outcome.repaint = true;
                 } else {
-                    self.stack_tab_press = Some(press);
+                    self.stack_pane_press = Some(press);
                 }
                 return;
             }
@@ -1314,7 +1314,7 @@ impl ClientShellState {
                 self.workspace_press = None;
                 self.tab_press = None;
                 match drag {
-                    ClientChromeDrag::StackTab { pane_id, drop } => {
+                    ClientChromeDrag::StackPane { pane_id, drop } => {
                         let method = self.snapshot.as_deref().and_then(|snapshot| {
                             render::stack_strip::drop_request(snapshot, pane_id, drop?)
                         });
@@ -1436,7 +1436,7 @@ impl ClientShellState {
                 self.finish_endpoint_workspace_press(press, outcome);
                 return;
             }
-            if self.stack_tab_press.take().is_some() {
+            if self.stack_pane_press.take().is_some() {
                 return;
             }
             if let Some(press) = self.tab_press.take() {
@@ -1920,14 +1920,14 @@ impl ClientShellState {
                     outcome.repaint = true;
                     return;
                 }
-                let stack_tab = self
+                let stack_pane = self
                     .hits
-                    .stack_tabs
+                    .stack_panes
                     .iter()
                     .find(|(rect, _)| super::contains(*rect, point))
                     .map(|(_, pane_id)| pane_id.clone());
-                if let Some(pane_id) = stack_tab {
-                    self.open_stack_tab_context_menu(pane_id, mouse.column, mouse.row);
+                if let Some(pane_id) = stack_pane {
+                    self.open_stack_pane_context_menu(pane_id, mouse.column, mouse.row);
                     outcome.repaint = true;
                     return;
                 }
@@ -2016,7 +2016,7 @@ impl ClientShellState {
                 let previous_pane_click = self.last_pane_click.take();
                 self.workspace_press = None;
                 self.tab_press = None;
-                self.stack_tab_press = None;
+                self.stack_pane_press = None;
                 self.chrome_drag = None;
                 // The toggle is painted over the agent scrollbar's last cell.
                 if super::contains(self.hits.sidebar_toggle, point) {
@@ -2143,7 +2143,7 @@ impl ClientShellState {
                 if let Some(method) = self.stack_strip_click(point) {
                     self.mode = ClientShellMode::Terminal;
                     if let crate::api::schema::Method::PaneFocus(target) = &method {
-                        self.stack_tab_press = Some(ClientStackTabPress {
+                        self.stack_pane_press = Some(ClientStackPanePress {
                             pane_id: target.pane_id.clone(),
                             start_column: mouse.column,
                             start_row: mouse.row,
@@ -2371,7 +2371,7 @@ impl ClientShellState {
             MouseEventKind::Down(MouseButton::Middle) => {
                 let tab = self
                     .hits
-                    .stack_tabs
+                    .stack_panes
                     .iter()
                     .find(|(rect, _)| super::contains(*rect, point))
                     .map(|(_, pane_id)| pane_id.clone());

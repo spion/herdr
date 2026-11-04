@@ -39,12 +39,12 @@ pub(crate) enum KeybindAction {
     MoveTabPrevious,
     MoveTabNext,
     CloseTab,
-    NewStackTab,
-    PreviousStackTab,
-    NextStackTab,
-    MoveStackTabPrevious,
-    MoveStackTabNext,
-    SwitchStackTab(usize),
+    NewStackPane,
+    PreviousStackPane,
+    NextStackPane,
+    MoveStackPanePrevious,
+    MoveStackPaneNext,
+    SwitchStackPane(usize),
     RenamePane,
     FocusPaneLeft,
     FocusPaneDown,
@@ -125,19 +125,19 @@ pub(crate) fn resolve_non_indexed_action(
         (&keybinds.move_tab_previous, KeybindAction::MoveTabPrevious),
         (&keybinds.move_tab_next, KeybindAction::MoveTabNext),
         (&keybinds.close_tab, KeybindAction::CloseTab),
-        (&keybinds.new_stack_tab, KeybindAction::NewStackTab),
+        (&keybinds.new_stack_pane, KeybindAction::NewStackPane),
         (
-            &keybinds.previous_stack_tab,
-            KeybindAction::PreviousStackTab,
+            &keybinds.previous_stack_pane,
+            KeybindAction::PreviousStackPane,
         ),
-        (&keybinds.next_stack_tab, KeybindAction::NextStackTab),
+        (&keybinds.next_stack_pane, KeybindAction::NextStackPane),
         (
-            &keybinds.move_stack_tab_previous,
-            KeybindAction::MoveStackTabPrevious,
+            &keybinds.move_stack_pane_previous,
+            KeybindAction::MoveStackPanePrevious,
         ),
         (
-            &keybinds.move_stack_tab_next,
-            KeybindAction::MoveStackTabNext,
+            &keybinds.move_stack_pane_next,
+            KeybindAction::MoveStackPaneNext,
         ),
         (&keybinds.rename_pane, KeybindAction::RenamePane),
         (&keybinds.edit_scrollback, KeybindAction::EditScrollback),
@@ -221,10 +221,10 @@ pub(crate) fn resolve_indexed_action(
                 }
             }
         }
-        for binding in &keybinds.switch_stack_tab {
+        for binding in &keybinds.switch_stack_pane {
             if trigger_matches(binding) {
                 if let Some(index) = binding.matched_index(key) {
-                    return Some(KeybindAction::SwitchStackTab(index));
+                    return Some(KeybindAction::SwitchStackPane(index));
                 }
             }
         }
@@ -343,7 +343,7 @@ mod tests {
         let one = TerminalKey::new(KeyCode::Char('1'), KeyModifiers::empty());
         assert!(matches!(
             resolve_prefix_binding(&keybinds, &one),
-            Some(KeybindMatch::Action(KeybindAction::SwitchStackTab(0)))
+            Some(KeybindMatch::Action(KeybindAction::SwitchStackPane(0)))
         ));
     }
 

@@ -397,11 +397,11 @@ fn prefix_endpoint_action_uses_public_api_with_stable_ids() {
     };
     assert_eq!(boot_id, "boot-1");
     match &request.method {
-        crate::api::schema::Method::PaneAddTab(params) => {
+        crate::api::schema::Method::PaneStackAdd(params) => {
             assert_eq!(params.pane_id, "pane_1");
             assert!(params.focus);
         }
-        other => panic!("expected pane.add_tab, got {other:?}"),
+        other => panic!("expected pane.stack_add, got {other:?}"),
     }
     assert!(state.pending_requests.contains_key(&request.id));
 }

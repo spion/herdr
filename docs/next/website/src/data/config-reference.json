@@ -692,46 +692,46 @@
           "description": "Close the active workspace tab. Unset by default."
         },
         {
-          "key": "keys.new_stack_tab",
+          "key": "keys.new_stack_pane",
           "type": "keybinding",
           "default": "\"prefix+c\"",
-          "description": "Open a new tab in the focused tile."
+          "description": "Open a new pane in the focused stack."
         },
         {
-          "key": "keys.previous_stack_tab",
+          "key": "keys.previous_stack_pane",
           "type": "keybinding",
           "default": "\"prefix+p\"",
-          "description": "Show the focused tile's previous tab."
+          "description": "Show the previous pane of the focused stack."
         },
         {
-          "key": "keys.next_stack_tab",
+          "key": "keys.next_stack_pane",
           "type": "keybinding",
           "default": "\"prefix+n\"",
-          "description": "Show the focused tile's next tab."
+          "description": "Show the next pane of the focused stack."
         },
         {
-          "key": "keys.move_stack_tab_previous",
+          "key": "keys.move_stack_pane_previous",
           "type": "keybinding",
           "default": "unset",
-          "description": "Move the focused tile's tab one position toward the front. Unset by default."
+          "description": "Move the focused pane one position in its stack, toward the front. Unset by default."
         },
         {
-          "key": "keys.move_stack_tab_next",
+          "key": "keys.move_stack_pane_next",
           "type": "keybinding",
           "default": "unset",
-          "description": "Move the focused tile's tab one position toward the back. Unset by default."
+          "description": "Move the focused pane one position in its stack, toward the back. Unset by default."
         },
         {
-          "key": "keys.switch_stack_tab",
+          "key": "keys.switch_stack_pane",
           "type": "keybinding",
           "default": "\"prefix+1..9\"",
-          "description": "Show tab 1-9 of the focused tile."
+          "description": "Show pane 1-9 of the focused stack."
         },
         {
           "key": "keys.rename_pane",
           "type": "keybinding",
           "default": "[\"prefix+shift+p\", \"prefix+shift+t\"]",
-          "description": "Rename the focused pane, which is the focused tile's tab."
+          "description": "Rename the focused pane."
         },
         {
           "key": "keys.edit_scrollback",
@@ -833,7 +833,7 @@
           "key": "keys.close_pane",
           "type": "keybinding",
           "default": "[\"prefix+x\", \"prefix+shift+x\"]",
-          "description": "Close the focused pane, which is the focused tile's tab."
+          "description": "Close the focused pane."
         },
         {
           "key": "keys.zoom",

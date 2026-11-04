@@ -373,17 +373,17 @@ mod tests {
                 json!({"target_pane_id": "pane", "direction": "down", "focus": false}),
             ),
             (
-                "add-tab",
+                "stack-add",
                 vec!["pane", "--cwd", "/tmp"],
-                "cli:pane:add-tab",
-                "pane.add_tab",
+                "cli:pane:stack-add",
+                "pane.stack_add",
                 json!({"pane_id": "pane", "cwd": "/tmp", "focus": false}),
             ),
             (
-                "move-tab",
+                "stack-move",
                 vec!["pane", "--to-pane", "other", "--index", "2"],
-                "cli:pane:move-tab",
-                "pane.move_tab",
+                "cli:pane:stack-move",
+                "pane.stack_move",
                 json!({"pane_id": "pane", "target_pane_id": "other", "index": 2}),
             ),
             (

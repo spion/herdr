@@ -1277,7 +1277,7 @@ mod tests {
         let mut workspace = Workspace::test_new("test");
         let layout = &mut workspace.tabs[0].layout;
         let stack = layout.stack_of(layout.focused()).unwrap().id();
-        layout.add_tab(stack, None, false);
+        layout.add_to_stack(stack, None, false);
         let area = Rect::new(0, 0, 100, 20);
 
         for borders in [
