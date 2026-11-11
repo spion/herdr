@@ -529,8 +529,11 @@ async fn run_client_loop(
     let reported_cell_size = Arc::new(AtomicU64::new(0));
     let host_sgr_pixels_active = Arc::new(AtomicBool::new(false));
 
-    // Channel for events from the resize and server reader threads.
+    // Channel for events from the resize and input threads.
     let (event_tx, mut event_rx) = tokio::sync::mpsc::channel::<ClientLoopEvent>(256);
+    // Server readers must not read ahead of presentation. A full slot blocks the
+    // reader, so the server's single render slot coalesces frames to the latest.
+    let (server_tx, mut server_rx) = tokio::sync::mpsc::channel::<ClientLoopEvent>(1);
     let (supervisor_tx, mut supervisor_rx) =
         tokio::sync::mpsc::channel::<endpoint::EndpointSupervisorEvent>(64);
     // Keep Windows console draining independent of server-frame backpressure.
@@ -626,7 +629,7 @@ async fn run_client_loop(
         let transport = start_endpoint_transport(
             stream,
             (),
-            &event_tx,
+            &server_tx,
             endpoint::ClientEndpointId::Local,
             1,
             max_frame_size,
@@ -821,6 +824,7 @@ async fn run_client_loop(
                     }
                 },
                 ev = event_rx.recv() => ev.unwrap_or(ClientLoopEvent::Timer),
+                ev = server_rx.recv() => ev.unwrap_or(ClientLoopEvent::Timer),
                 ev = supervisor_rx.recv() => ev.map(ClientLoopEvent::EndpointSupervisor).unwrap_or(ClientLoopEvent::Timer),
             }
         };
@@ -834,6 +838,7 @@ async fn run_client_loop(
                 _ = tokio::time::sleep_until(timer_deadline.into()) => ClientLoopEvent::Timer,
                 ev = supervisor_rx.recv() => ev.map(ClientLoopEvent::EndpointSupervisor).unwrap_or(ClientLoopEvent::Timer),
                 ev = event_rx.recv() => ev.unwrap_or(ClientLoopEvent::Timer),
+                ev = server_rx.recv() => ev.unwrap_or(ClientLoopEvent::Timer),
             }
         };
         let now = std::time::Instant::now();
@@ -1408,7 +1413,7 @@ async fn run_client_loop(
                     if let Some(frame) = frame {
                         state.present_frame(frame);
                     }
-                    let reader_tx = event_tx.clone();
+                    let reader_tx = server_tx.clone();
                     std::thread::spawn(move || {
                         server_reader_thread(
                             reader,
