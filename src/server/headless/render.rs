@@ -438,7 +438,9 @@ impl HeadlessServer {
             else {
                 return false;
             };
-            tab.panes.contains_key(&pane_id) && (!tab.zoomed || tab.layout.focused() == pane_id)
+            tab.panes.contains_key(&pane_id)
+                && tab.layout.is_shown(pane_id)
+                && (!tab.zoomed || tab.layout.focused() == pane_id)
         })
     }
 

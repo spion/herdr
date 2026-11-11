@@ -3,8 +3,10 @@ pub(crate) mod bindings;
 use clap::ArgMatches;
 
 use super::projection::ParseError;
-use crate::api::schema::panes::{PaneMetadataProjection, PaneMoveProjection, PaneSwapProjection};
-use crate::api::schema::{Method, PaneDirection, PaneMoveDestination};
+use crate::api::schema::panes::{
+    PaneFocusDirectionParams, PaneMetadataProjection, PaneMoveProjection, PaneSwapProjection,
+};
+use crate::api::schema::{Method, PaneDirection, PaneMoveDestination, PaneTarget};
 
 pub(crate) fn command() -> clap::Command {
     bindings::command()
@@ -91,6 +93,36 @@ fn caller_target(
         return Ok(caller.map(super::normalize_pane_id));
     }
     Ok(pane)
+}
+
+/// The pane chosen by an `input_target` selector, resolving `--current`.
+fn selected_pane(matches: &ArgMatches, pane: String) -> Result<String, ParseError> {
+    if !matches.get_flag("current") {
+        return Ok(pane);
+    }
+    super::target::caller_pane_id()
+        .map(|value| super::normalize_pane_id(&value))
+        .ok_or_else(|| ParseError::Usage("--current requires HERDR_PANE_ID".into()))
+}
+
+fn focus(matches: &ArgMatches) -> Result<Method, ParseError> {
+    let args = bindings::PaneFocusProjection::from_matches(matches)?;
+    if let Some(direction) = args.direction {
+        return Ok(Method::PaneFocusDirection(PaneFocusDirectionParams {
+            pane_id: args.pane_id,
+            direction,
+        }));
+    }
+    let pane_id = match args.pane_id {
+        Some(pane_id) => pane_id,
+        None if matches.get_flag("current") => selected_pane(matches, String::new())?,
+        None => {
+            return Err(ParseError::Usage(
+                "pane focus needs a pane or --direction".into(),
+            ))
+        }
+    };
+    Ok(Method::PaneFocus(PaneTarget { pane_id }))
 }
 
 fn direction(value: &str) -> Result<PaneDirection, ParseError> {
@@ -332,6 +364,27 @@ mod tests {
                 "cli:pane:split",
                 "pane.split",
                 json!({"target_pane_id": "pane", "direction": "down", "focus": false, "right_click": "herdr"}),
+            ),
+            (
+                "create",
+                vec!["pane", "--direction", "down"],
+                "cli:pane:create",
+                "pane.create",
+                json!({"target_pane_id": "pane", "direction": "down", "focus": false}),
+            ),
+            (
+                "stack-add",
+                vec!["pane", "--cwd", "/tmp"],
+                "cli:pane:stack-add",
+                "pane.stack_add",
+                json!({"pane_id": "pane", "cwd": "/tmp", "focus": false}),
+            ),
+            (
+                "stack-move",
+                vec!["pane", "--to-pane", "other", "--index", "2"],
+                "cli:pane:stack-move",
+                "pane.stack_move",
+                json!({"pane_id": "pane", "target_pane_id": "other", "index": 2}),
             ),
             (
                 "swap",
@@ -607,6 +660,25 @@ mod tests {
                 .get("pane_id")
                 .is_none());
         }
+    }
+
+    #[test]
+    fn pane_focus_goes_to_a_named_pane_unless_given_a_direction() {
+        let method = |args: &[&str]| serde_json::to_value(request("focus", args).unwrap()).unwrap();
+
+        let by_id = method(&["w1:p2"]);
+        assert_eq!(by_id["method"], "pane.focus");
+        assert_eq!(by_id["params"], serde_json::json!({"pane_id": "w1:p2"}));
+        assert_eq!(method(&["--pane", "w1:p2"])["params"], by_id["params"]);
+
+        let from_pane = method(&["w1:p2", "--direction", "left"]);
+        assert_eq!(from_pane["method"], "pane.focus_direction");
+        assert_eq!(
+            from_pane["params"],
+            serde_json::json!({"pane_id": "w1:p2", "direction": "left"})
+        );
+
+        assert!(request("focus", &[]).is_err());
     }
 
     #[test]

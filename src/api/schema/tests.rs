@@ -823,6 +823,8 @@ fn worktree_request_and_response_round_trip() {
                 terminal_id: "term_1".into(),
                 workspace_id: "w_1".into(),
                 tab_id: "w_1:1".into(),
+                stack_id: None,
+                hidden: false,
                 focused: true,
                 cwd: Some("/worktrees/herdr/worktree-api".into()),
                 foreground_cwd: None,
@@ -1073,6 +1075,8 @@ fn layout_export_apply_round_trip() {
                 cwd: Some("/repo".into()),
                 ..Default::default()
             },
+            stack: Vec::new(),
+            active: 0,
         }),
         second: Box::new(LayoutNode::Pane {
             pane: LayoutPane {
@@ -1081,6 +1085,8 @@ fn layout_export_apply_round_trip() {
                 env: HashMap::from([("HERDR_ROLE".into(), "tests".into())]),
                 ..Default::default()
             },
+            stack: Vec::new(),
+            active: 0,
         }),
     };
 
@@ -1140,6 +1146,8 @@ fn layout_export_apply_round_trip() {
                         pane_id: Some("w1-1".into()),
                         ..Default::default()
                     },
+                    stack: Vec::new(),
+                    active: 0,
                 },
             },
         },
@@ -1252,6 +1260,8 @@ fn create_response_round_trips_with_root_pane() {
                 terminal_id: "term_example".into(),
                 workspace_id: "w_1".into(),
                 tab_id: "w_1:2".into(),
+                stack_id: None,
+                hidden: false,
                 focused: false,
                 cwd: Some("/tmp/review".into()),
                 foreground_cwd: None,

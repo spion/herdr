@@ -20,6 +20,7 @@ mod git;
 mod tab;
 
 use self::git::git_status_cache_key_for_space;
+use self::tab::NewPaneSite;
 pub(crate) use self::{git::git_status_snapshot_for_cwd_with_demand, tab::MovedPane};
 pub use self::{
     git::{
@@ -452,8 +453,10 @@ impl Workspace {
         if idx < self.tabs.len() {
             self.active_tab = idx;
             if let Some(tab) = self.tabs.get_mut(idx) {
-                for pane in tab.panes.values_mut() {
-                    pane.seen = true;
+                for (pane_id, pane) in &mut tab.panes {
+                    if tab.layout.is_shown(*pane_id) {
+                        pane.seen = true;
+                    }
                 }
             }
         }
@@ -673,8 +676,10 @@ impl Workspace {
     ) -> Option<std::io::Result<(usize, crate::workspace::tab::NewPane)>> {
         self.split_pane_with_runtime(
             pane_id,
-            direction,
-            None,
+            NewPaneSite::Split {
+                direction,
+                ratio: None,
+            },
             rows,
             cols,
             cwd,
@@ -706,8 +711,10 @@ impl Workspace {
     ) -> Option<std::io::Result<(usize, crate::workspace::tab::NewPane)>> {
         self.split_pane_with_runtime(
             pane_id,
-            direction,
-            Some(ratio),
+            NewPaneSite::Split {
+                direction,
+                ratio: Some(ratio),
+            },
             rows,
             cols,
             cwd,
@@ -738,8 +745,10 @@ impl Workspace {
     ) -> Option<std::io::Result<(usize, crate::workspace::tab::NewPane)>> {
         self.split_pane_with_runtime(
             pane_id,
-            direction,
-            None,
+            NewPaneSite::Split {
+                direction,
+                ratio: None,
+            },
             rows,
             cols,
             cwd,
@@ -771,8 +780,72 @@ impl Workspace {
     ) -> Option<std::io::Result<(usize, crate::workspace::tab::NewPane)>> {
         self.split_pane_with_runtime(
             pane_id,
-            direction,
-            Some(ratio),
+            NewPaneSite::Split {
+                direction,
+                ratio: Some(ratio),
+            },
+            rows,
+            cols,
+            cwd,
+            scrollback_limit_bytes,
+            host_terminal_theme,
+            host_terminal_appearance,
+            crate::pane::PaneShellConfig::new("", crate::config::ShellModeConfig::NonLogin),
+            extra_env,
+            focus_new_pane,
+            Some(argv),
+        )
+    }
+
+    /// Open a shell pane as a new tab in `pane_id`'s tile.
+    #[allow(clippy::too_many_arguments)]
+    pub fn add_stack_pane(
+        &mut self,
+        pane_id: PaneId,
+        rows: u16,
+        cols: u16,
+        cwd: Option<PathBuf>,
+        scrollback_limit_bytes: usize,
+        host_terminal_theme: crate::terminal_theme::TerminalTheme,
+        host_terminal_appearance: Option<crate::terminal_theme::HostAppearance>,
+        shell_config: crate::pane::PaneShellConfig<'_>,
+        extra_env: Vec<(String, String)>,
+        focus_new_pane: bool,
+    ) -> Option<std::io::Result<(usize, crate::workspace::tab::NewPane)>> {
+        self.split_pane_with_runtime(
+            pane_id,
+            NewPaneSite::Tab,
+            rows,
+            cols,
+            cwd,
+            scrollback_limit_bytes,
+            host_terminal_theme,
+            host_terminal_appearance,
+            shell_config,
+            extra_env,
+            focus_new_pane,
+            None,
+        )
+    }
+
+    /// Open `argv` as a new tab in `pane_id`'s tile.
+    #[allow(clippy::too_many_arguments)]
+    pub fn add_stack_pane_argv(
+        &mut self,
+        pane_id: PaneId,
+        rows: u16,
+        cols: u16,
+        cwd: Option<PathBuf>,
+        argv: &[String],
+        extra_env: Vec<(String, String)>,
+        scrollback_limit_bytes: usize,
+        host_terminal_theme: crate::terminal_theme::TerminalTheme,
+        host_terminal_appearance: Option<crate::terminal_theme::HostAppearance>,
+        focus_new_pane: bool,
+    ) -> Option<std::io::Result<(usize, crate::workspace::tab::NewPane)>> {
+        self.split_pane_with_runtime(
+            pane_id,
+            NewPaneSite::Tab,
             rows,
             cols,
             cwd,
@@ -790,8 +863,7 @@ impl Workspace {
     fn split_pane_with_runtime(
         &mut self,
         pane_id: PaneId,
-        direction: Direction,
-        ratio: Option<f32>,
+        site: NewPaneSite,
         rows: u16,
         cols: u16,
         cwd: Option<PathBuf>,
@@ -812,8 +884,7 @@ impl Workspace {
             tab.split_pane_argv(
                 pane_id,
                 focus_new_pane,
-                direction,
-                ratio,
+                site,
                 rows,
                 cols,
                 cwd,
@@ -827,8 +898,7 @@ impl Workspace {
             tab.split_pane_shell(
                 pane_id,
                 focus_new_pane,
-                direction,
-                ratio,
+                site,
                 rows,
                 cols,
                 cwd,

@@ -145,6 +145,10 @@ operations::define_operations! {
     PluginPaneOpen(PluginPaneOpenParams) => "plugin.pane.open", true, false;
     PluginPaneFocus(PluginPaneFocusParams) => "plugin.pane.focus", true, false;
     PluginPaneClose(PluginPaneCloseParams) => "plugin.pane.close", true, false;
+    PaneStackAdd(PaneStackAddParams) => "pane.stack_add", true, true;
+    PaneStackMove(PaneStackMoveParams) => "pane.stack_move", true, true;
+    PaneCreate(PaneCreateParams) => "pane.create", true, true;
+    PaneStackSplit(PaneStackSplitParams) => "pane.stack_split", true, true;
 }
 
 #[cfg(test)]

@@ -504,7 +504,6 @@ mod tests {
         for (path, options) in [
             (&["workspace", "report-metadata"][..], &["source"][..]),
             (&["pane", "neighbor"][..], &["direction"][..]),
-            (&["pane", "focus"][..], &["direction"][..]),
             (&["pane", "resize"][..], &["direction"][..]),
             (&["pane", "report-agent"][..], &["source", "agent"][..]),
             (

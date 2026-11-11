@@ -379,9 +379,10 @@ impl AppState {
         if active_ws_idx != ws_idx {
             return false;
         }
-        self.workspaces[ws_idx]
-            .find_tab_index_for_pane(pane_id)
-            .is_some_and(|tab_idx| tab_idx == self.workspaces[ws_idx].active_tab)
+        let ws = &self.workspaces[ws_idx];
+        ws.find_tab_index_for_pane(pane_id)
+            .is_some_and(|tab_idx| tab_idx == ws.active_tab)
+            && ws.tabs[ws.active_tab].layout.is_shown(pane_id)
     }
 
     pub fn switch_workspace(&mut self, idx: usize) {
@@ -463,8 +464,8 @@ impl AppState {
         };
 
         let mut changed = false;
-        for pane in tab.panes.values_mut() {
-            if !pane.seen {
+        for (pane_id, pane) in &mut tab.panes {
+            if !pane.seen && tab.layout.is_shown(*pane_id) {
                 pane.seen = true;
                 changed = true;
             }
@@ -828,7 +829,7 @@ impl AppState {
             .workspaces
             .get_mut(ws_idx)
             .and_then(|ws| ws.tabs.get_mut(tab_idx))?;
-        if tab.layout.pane_count() <= 1 {
+        if tab.layout.tile_count() <= 1 {
             return Some(PaneZoomOutcome {
                 changed: false,
                 focus_changed,

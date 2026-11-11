@@ -698,6 +698,8 @@ mod tests {
             terminal_id: "terminal_1".into(),
             workspace_id: "workspace_1".into(),
             tab_id: "tab_1".into(),
+            stack_id: None,
+            hidden: false,
             focused: true,
             cwd: None,
             foreground_cwd: None,

@@ -553,7 +553,7 @@ fn startup_config_diagnostics_are_client_rendered_and_persist_until_replaced() {
 
 #[test]
 fn config_diagnostic_offsets_only_the_pane_rows_it_overlaps() {
-    let mut config = ClientShellConfig::from_config(&Config::default());
+    let mut config = tab_bar_config();
     config.toast_delay_seconds = 0;
     let mut state = ClientShellState::new(config);
     let mut endpoint_snapshot = snapshot();

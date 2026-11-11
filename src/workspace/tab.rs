@@ -18,6 +18,18 @@ pub(crate) struct MovedPane {
     pub pane_state: PaneState,
 }
 
+/// Where a new pane goes relative to its target pane.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum NewPaneSite {
+    /// A new tile beside the target's tile.
+    Split {
+        direction: Direction,
+        ratio: Option<f32>,
+    },
+    /// A new tab in the target's tile.
+    Tab,
+}
+
 pub struct NewPane {
     pub pane_id: PaneId,
     pub terminal: TerminalState,
@@ -220,8 +232,10 @@ impl Tab {
         self.split_pane_with_runtime(
             self.layout.focused(),
             true,
-            direction,
-            None,
+            NewPaneSite::Split {
+                direction,
+                ratio: None,
+            },
             rows,
             cols,
             cwd,
@@ -237,7 +251,7 @@ impl Tab {
         )
     }
 
-    /// Split `target` with a shell pane. Focus moves to the new pane only when
+    /// Split `target` with a shell pane, or add it as a tab of `target`'s tile. Focus moves to the new pane only when
     /// `focus_new_pane` is set; a spawn failure rolls the layout back without
     /// touching focus or its history.
     #[allow(clippy::too_many_arguments)]
@@ -245,8 +259,7 @@ impl Tab {
         &mut self,
         target: PaneId,
         focus_new_pane: bool,
-        direction: Direction,
-        ratio: Option<f32>,
+        site: NewPaneSite,
         rows: u16,
         cols: u16,
         cwd: Option<PathBuf>,
@@ -259,8 +272,7 @@ impl Tab {
         self.split_pane_with_runtime(
             target,
             focus_new_pane,
-            direction,
-            ratio,
+            site,
             rows,
             cols,
             cwd,
@@ -280,8 +292,7 @@ impl Tab {
         &mut self,
         target: PaneId,
         focus_new_pane: bool,
-        direction: Direction,
-        ratio: Option<f32>,
+        site: NewPaneSite,
         rows: u16,
         cols: u16,
         cwd: Option<PathBuf>,
@@ -294,8 +305,7 @@ impl Tab {
         self.split_pane_with_runtime(
             target,
             focus_new_pane,
-            direction,
-            ratio,
+            site,
             rows,
             cols,
             cwd,
@@ -314,8 +324,7 @@ impl Tab {
         &mut self,
         target: PaneId,
         focus_new_pane: bool,
-        direction: Direction,
-        ratio: Option<f32>,
+        site: NewPaneSite,
         rows: u16,
         cols: u16,
         cwd: Option<PathBuf>,
@@ -326,10 +335,18 @@ impl Tab {
         launch_env: &PaneLaunchEnv,
         command: Option<SplitCommand<'_>>,
     ) -> std::io::Result<NewPane> {
-        let Some(new_id) = self
-            .layout
-            .split_pane(target, direction, ratio.unwrap_or(0.5))
-        else {
+        let new_id = match site {
+            NewPaneSite::Split { direction, ratio } => {
+                self.layout
+                    .split_pane(target, direction, ratio.unwrap_or(0.5))
+            }
+            NewPaneSite::Tab => self
+                .layout
+                .stack_of(target)
+                .map(|stack| stack.id())
+                .and_then(|stack| self.layout.add_to_stack(stack, None, false)),
+        };
+        let Some(new_id) = new_id else {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 "split target pane is not in the layout",
@@ -446,7 +463,7 @@ impl Tab {
             custom_name,
             number,
             root_pane: pane_id,
-            layout: TileLayout::from_saved(Node::Pane(pane_id), pane_id),
+            layout: TileLayout::from_saved(Node::pane(pane_id), pane_id),
             panes,
             #[cfg(test)]
             runtimes: HashMap::new(),

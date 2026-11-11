@@ -299,9 +299,17 @@ impl App {
         node: &Node,
     ) -> Option<LayoutNode> {
         match node {
-            Node::Pane(pane_id) => Some(LayoutNode::Pane {
-                pane: self.layout_pane_description(ws_idx, tab_idx, *pane_id)?,
-            }),
+            Node::Stack(stack) => {
+                let (first, others) = stack.panes().split_first()?;
+                Some(LayoutNode::Pane {
+                    pane: self.layout_pane_description(ws_idx, tab_idx, *first)?,
+                    stack: others
+                        .iter()
+                        .map(|pane| self.layout_pane_description(ws_idx, tab_idx, *pane))
+                        .collect::<Option<_>>()?,
+                    active: stack.active_index(),
+                })
+            }
             Node::Split {
                 direction,
                 ratio,
@@ -373,8 +381,24 @@ impl App {
         pane_sizes: &[(u16, u16)],
     ) -> Result<(), String> {
         match node {
-            LayoutNode::Pane { pane } => {
+            LayoutNode::Pane {
+                pane,
+                stack,
+                active,
+            } => {
                 self.apply_layout_pane_label(ws_idx, pane_id, pane);
+                let Some(&size) = pane_sizes.first() else {
+                    return Err("layout pane sizes do not match the layout".into());
+                };
+                let mut stack_panes = vec![pane_id];
+                for tab in stack {
+                    stack_panes.push(self.layout_spawn_pane(ws_idx, pane_id, None, tab, size)?);
+                }
+                if let Some(ws) = self.state.workspaces.get_mut(ws_idx) {
+                    if let Some(tab_idx) = ws.find_tab_index_for_pane(pane_id) {
+                        ws.tabs[tab_idx].layout.show(stack_panes[*active]);
+                    }
+                }
                 Ok(())
             }
             LayoutNode::Split {
@@ -388,11 +412,10 @@ impl App {
                 let Some(&size) = second_sizes.first() else {
                     return Err("layout pane sizes do not match the layout".into());
                 };
-                let new_pane = self.layout_split_pane(
+                let new_pane = self.layout_spawn_pane(
                     ws_idx,
                     pane_id,
-                    direction.clone(),
-                    *ratio,
+                    Some((layout_direction(direction), *ratio)),
                     first_layout_leaf(second),
                     size,
                 )?;
@@ -402,16 +425,16 @@ impl App {
         }
     }
 
-    fn layout_split_pane(
+    /// Spawn `pane` split off `target_pane_id`, or with no `split` as a tab of
+    /// its tile.
+    fn layout_spawn_pane(
         &mut self,
         ws_idx: usize,
         target_pane_id: PaneId,
-        direction: SplitDirection,
-        ratio: f32,
+        split: Option<(Direction, f32)>,
         pane: &LayoutPane,
         (rows, cols): (u16, u16),
     ) -> Result<PaneId, String> {
-        let direction = layout_direction(&direction);
         let default_shell = self.state.default_shell.clone();
         let scrollback_limit_bytes = self.state.pane_scrollback_limit_bytes;
         let host_terminal_theme = self.state.host_terminal_theme;
@@ -428,8 +451,8 @@ impl App {
             let Some(ws) = self.state.workspaces.get_mut(ws_idx) else {
                 return Err("workspace not found".into());
             };
-            if let Some(argv) = command.as_deref() {
-                ws.split_pane_argv_command_with_ratio(
+            match (command.as_deref(), split) {
+                (Some(argv), Some((direction, ratio))) => ws.split_pane_argv_command_with_ratio(
                     target_pane_id,
                     direction,
                     ratio,
@@ -442,9 +465,20 @@ impl App {
                     host_terminal_theme,
                     host_terminal_appearance,
                     false,
-                )
-            } else {
-                ws.split_pane_with_ratio(
+                ),
+                (Some(argv), None) => ws.add_stack_pane_argv(
+                    target_pane_id,
+                    rows,
+                    cols,
+                    cwd,
+                    argv,
+                    extra_env,
+                    scrollback_limit_bytes,
+                    host_terminal_theme,
+                    host_terminal_appearance,
+                    false,
+                ),
+                (None, Some((direction, ratio))) => ws.split_pane_with_ratio(
                     target_pane_id,
                     direction,
                     ratio,
@@ -457,7 +491,19 @@ impl App {
                     crate::pane::PaneShellConfig::new(&default_shell, self.state.shell_mode),
                     extra_env,
                     false,
-                )
+                ),
+                (None, None) => ws.add_stack_pane(
+                    target_pane_id,
+                    rows,
+                    cols,
+                    cwd,
+                    scrollback_limit_bytes,
+                    host_terminal_theme,
+                    host_terminal_appearance,
+                    crate::pane::PaneShellConfig::new(&default_shell, self.state.shell_mode),
+                    extra_env,
+                    false,
+                ),
             }
         };
         let (_, new_pane) = result
@@ -548,7 +594,7 @@ fn final_tile_layout(root: &LayoutNode) -> crate::layout::TileLayout {
         match node {
             LayoutNode::Pane { .. } => {
                 *next_id += 1;
-                Node::Pane(PaneId::from_raw(*next_id))
+                Node::pane(PaneId::from_raw(*next_id))
             }
             LayoutNode::Split {
                 direction,
@@ -569,7 +615,7 @@ fn final_tile_layout(root: &LayoutNode) -> crate::layout::TileLayout {
 
 fn first_layout_leaf(node: &LayoutNode) -> &LayoutPane {
     match node {
-        LayoutNode::Pane { pane } => pane,
+        LayoutNode::Pane { pane, .. } => pane,
         LayoutNode::Split { first, .. } => first_layout_leaf(first),
     }
 }
@@ -621,14 +667,23 @@ fn validate_layout_node(
         ));
     }
     match node {
-        LayoutNode::Pane { pane } => {
-            stats.panes += 1;
-            if stats.panes > MAX_LAYOUT_PANES {
-                return Err(format!("layout has more than {} panes", MAX_LAYOUT_PANES));
+        LayoutNode::Pane {
+            pane,
+            stack,
+            active,
+        } => {
+            if *active > stack.len() {
+                return Err(format!("active {active} is out of range"));
             }
-            layout_command(pane)?;
-            super::env::normalize_launch_env(pane.env.clone())
-                .map_err(|(_, message)| message.to_string())?;
+            for tab in std::iter::once(pane).chain(stack) {
+                stats.panes += 1;
+                if stats.panes > MAX_LAYOUT_PANES {
+                    return Err(format!("layout has more than {} panes", MAX_LAYOUT_PANES));
+                }
+                layout_command(tab)?;
+                super::env::normalize_launch_env(tab.env.clone())
+                    .map_err(|(_, message)| message.to_string())?;
+            }
             Ok(())
         }
         LayoutNode::Split {
@@ -719,7 +774,7 @@ mod tests {
         };
         assert_eq!(direction, SplitDirection::Right);
         assert!((ratio - 0.65).abs() < f32::EPSILON);
-        let LayoutNode::Pane { pane } = *second else {
+        let LayoutNode::Pane { pane, .. } = *second else {
             panic!("expected second pane");
         };
         assert_eq!(pane.label.as_deref(), Some("tests"));
@@ -787,6 +842,8 @@ mod tests {
         let pane = || {
             Box::new(LayoutNode::Pane {
                 pane: LayoutPane::default(),
+                stack: Vec::new(),
+                active: 0,
             })
         };
         let split = |direction, ratio, first, second| {
@@ -850,6 +907,53 @@ mod tests {
         shutdown_test_runtimes(&mut app);
     }
 
+    /// Business rule: an exported layout keeps every tab of a tile and which
+    /// one it shows, so a template never loses a hidden terminal.
+    #[tokio::test]
+    async fn layout_apply_and_export_keep_a_tiles_tabs() {
+        let mut app = app_with_workspace();
+        let tab = |label: &str| LayoutPane {
+            label: Some(label.into()),
+            ..Default::default()
+        };
+        let original_tab_id = app.public_tab_id(0, 0).unwrap();
+
+        let response = app.handle_layout_apply(
+            "req".into(),
+            LayoutApplyParams {
+                workspace_id: None,
+                tab_id: Some(original_tab_id),
+                tab_label: None,
+                focus: false,
+                root: LayoutNode::Pane {
+                    pane: tab("first"),
+                    stack: vec![tab("second"), tab("third")],
+                    active: 1,
+                },
+            },
+        );
+
+        let success: SuccessResponse = serde_json::from_str(&response).unwrap();
+        let ResponseResult::LayoutApply { layout } = success.result else {
+            panic!("expected layout apply result");
+        };
+        let LayoutNode::Pane {
+            pane,
+            stack,
+            active,
+        } = layout.root
+        else {
+            panic!("expected one tile");
+        };
+        let labels: Vec<_> = std::iter::once(&pane)
+            .chain(&stack)
+            .map(|tab| tab.label.as_deref().unwrap())
+            .collect();
+        assert_eq!(labels, ["first", "second", "third"]);
+        assert_eq!(active, 1);
+        shutdown_test_runtimes(&mut app);
+    }
+
     #[tokio::test]
     async fn layout_apply_replaces_tab_with_requested_tree() {
         let mut app = app_with_workspace();
@@ -870,6 +974,8 @@ mod tests {
                             label: Some("editor".into()),
                             ..Default::default()
                         },
+                        stack: Vec::new(),
+                        active: 0,
                     }),
                     second: Box::new(LayoutNode::Pane {
                         pane: LayoutPane {
@@ -881,6 +987,8 @@ mod tests {
                             )]),
                             ..Default::default()
                         },
+                        stack: Vec::new(),
+                        active: 0,
                     }),
                 },
             },
@@ -906,10 +1014,16 @@ mod tests {
         };
         assert_eq!(direction, SplitDirection::Right);
         assert!((ratio - 0.7).abs() < f32::EPSILON);
-        let LayoutNode::Pane { pane: first_pane } = *first else {
+        let LayoutNode::Pane {
+            pane: first_pane, ..
+        } = *first
+        else {
             panic!("expected first pane");
         };
-        let LayoutNode::Pane { pane: second_pane } = *second else {
+        let LayoutNode::Pane {
+            pane: second_pane, ..
+        } = *second
+        else {
             panic!("expected second pane");
         };
         assert_eq!(first_pane.label.as_deref(), Some("editor"));
@@ -947,6 +1061,8 @@ mod tests {
                 focus: false,
                 root: LayoutNode::Pane {
                     pane: LayoutPane::default(),
+                    stack: Vec::new(),
+                    active: 0,
                 },
             },
         );
@@ -988,6 +1104,8 @@ mod tests {
                         label: Some("editor".into()),
                         ..Default::default()
                     },
+                    stack: Vec::new(),
+                    active: 0,
                 },
             },
         );
@@ -1018,12 +1136,16 @@ mod tests {
                             label: Some("editor".into()),
                             ..Default::default()
                         },
+                        stack: Vec::new(),
+                        active: 0,
                     }),
                     second: Box::new(LayoutNode::Pane {
                         pane: LayoutPane {
                             command: Some(Vec::new()),
                             ..Default::default()
                         },
+                        stack: Vec::new(),
+                        active: 0,
                     }),
                 },
             },
@@ -1038,6 +1160,8 @@ mod tests {
     fn layout_validation_rejects_too_many_panes() {
         let mut root = LayoutNode::Pane {
             pane: LayoutPane::default(),
+            stack: Vec::new(),
+            active: 0,
         };
         for _ in 0..MAX_LAYOUT_PANES {
             root = LayoutNode::Split {
@@ -1046,6 +1170,8 @@ mod tests {
                 first: Box::new(root),
                 second: Box::new(LayoutNode::Pane {
                     pane: LayoutPane::default(),
+                    stack: Vec::new(),
+                    active: 0,
                 }),
             };
         }

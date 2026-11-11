@@ -58,6 +58,22 @@ fn zoomed_pane_borders(app: &AppState, multi_pane: bool) -> Borders {
     }
 }
 
+/// Borders of `tab`'s zoomed focused pane, keeping the row its tab strip needs.
+fn zoomed_tab_pane_borders(app: &AppState, tab: &crate::workspace::Tab) -> Borders {
+    let borders = zoomed_pane_borders(app, tab.layout.tile_count() > 1);
+    if focused_tile_is_stacked(tab) {
+        borders | Borders::TOP
+    } else {
+        borders
+    }
+}
+
+fn focused_tile_is_stacked(tab: &crate::workspace::Tab) -> bool {
+    tab.layout
+        .stack_of(tab.layout.focused())
+        .is_some_and(|stack| stack.panes().len() > 1)
+}
+
 /// Where a pane that is about to be created will sit in its tab.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum NewPanePlacement {
@@ -103,9 +119,10 @@ pub(crate) fn new_pane_terminal_size(
         NewPanePlacement::Existing { ws_idx, pane } => tab_for(ws_idx, pane)
             .and_then(|tab| {
                 if tab.zoomed && tab.layout.focused() == pane {
-                    let multi_pane = tab.layout.pane_count() > 1;
-                    return Some(pane_inner_rect(area, zoomed_pane_borders(app, multi_pane)));
+                    return Some(pane_inner_rect(area, zoomed_tab_pane_borders(app, tab)));
                 }
+                // A hidden tab is sized like the tab its stack shows.
+                let pane = tab.layout.stack_of(pane)?.active();
                 let panes = tab.layout.panes(area);
                 let index = panes.iter().position(|info| info.id == pane)?;
                 Some(laid_out(panes, index))
@@ -259,6 +276,9 @@ pub(crate) fn apply_pane_chrome(
                 }
                 borders
             };
+            if info.stacked {
+                info.borders |= Borders::TOP;
+            }
             info
         })
         .collect()
@@ -319,14 +339,12 @@ pub(super) fn resize_tab_panes(
     area: Rect,
     cell_size: crate::kitty_graphics::HostCellSize,
 ) {
-    let multi_pane = tab.layout.pane_count() > 1;
-
     if tab.zoomed {
         let focused_id = tab.layout.focused();
         if let Some((terminal_id, rt)) =
             runtime_for_tab_pane(app, terminal_runtimes, workspace_index, tab, focused_id)
         {
-            let pane_inner = pane_inner_rect(area, zoomed_pane_borders(app, multi_pane));
+            let pane_inner = pane_inner_rect(area, zoomed_tab_pane_borders(app, tab));
             let inner_rect = terminal_inner_rect(rt, pane_inner, app.pane_scrollbars);
             if !app.direct_attach_resize_locks.contains(terminal_id) {
                 rt.resize(
@@ -340,17 +358,63 @@ pub(super) fn resize_tab_panes(
         return;
     }
 
-    for info in apply_pane_chrome(
+    let pane_infos = apply_pane_chrome(
         tab.layout.panes(area),
         app.pane_borders,
         app.pane_gaps,
         app.pane_outer_borders,
-    ) {
+    );
+    for info in &pane_infos {
         let pane_inner = pane_inner_rect(info.rect, info.borders);
 
         if let Some((terminal_id, rt)) =
             runtime_for_tab_pane(app, terminal_runtimes, workspace_index, tab, info.id)
         {
+            let inner_rect = terminal_inner_rect(rt, pane_inner, app.pane_scrollbars);
+            if !app.direct_attach_resize_locks.contains(terminal_id) {
+                rt.resize(
+                    inner_rect.height,
+                    inner_rect.width,
+                    cell_size.width_px,
+                    cell_size.height_px,
+                );
+            }
+        }
+    }
+    resize_hidden_stack_panes(
+        app,
+        terminal_runtimes,
+        workspace_index,
+        tab,
+        &pane_infos,
+        cell_size,
+    );
+}
+
+/// Size each hidden stack pane like its stack's visible pane, so switching
+/// tabs shows it without a reflow.
+fn resize_hidden_stack_panes(
+    app: &AppState,
+    terminal_runtimes: &TerminalRuntimeRegistry,
+    workspace_index: usize,
+    tab: &crate::workspace::Tab,
+    visible: &[PaneInfo],
+    cell_size: crate::kitty_graphics::HostCellSize,
+) {
+    if tab.layout.pane_count() == visible.len() {
+        return;
+    }
+    for stack in tab.layout.stacks() {
+        let Some(shown) = visible.iter().find(|info| info.id == stack.active) else {
+            continue;
+        };
+        let pane_inner = pane_inner_rect(shown.rect, shown.borders);
+        for &pane_id in stack.panes.iter().filter(|id| **id != stack.active) {
+            let Some((terminal_id, rt)) =
+                runtime_for_tab_pane(app, terminal_runtimes, workspace_index, tab, pane_id)
+            else {
+                continue;
+            };
             let inner_rect = terminal_inner_rect(rt, pane_inner, app.pane_scrollbars);
             if !app.direct_attach_resize_locks.contains(terminal_id) {
                 rt.resize(
@@ -382,11 +446,9 @@ pub(super) fn compute_pane_infos_for_tab(
         return Vec::new();
     };
 
-    let multi_pane = tab.layout.pane_count() > 1;
-
     if tab.zoomed {
         let focused_id = tab.layout.focused();
-        let borders = zoomed_pane_borders(app, multi_pane);
+        let borders = zoomed_tab_pane_borders(app, tab);
         let pane_inner = pane_inner_rect(area, borders);
         let mut inner_rect = pane_inner;
         let mut scrollbar_rect = None;
@@ -413,6 +475,7 @@ pub(super) fn compute_pane_infos_for_tab(
             scrollbar_rect,
             borders,
             is_focused: true,
+            stacked: focused_tile_is_stacked(tab),
         }];
     }
 
@@ -447,6 +510,9 @@ pub(super) fn compute_pane_infos_for_tab(
 
         info.inner_rect = inner_rect;
         info.scrollbar_rect = scrollbar_rect;
+    }
+    if resize_panes {
+        resize_hidden_stack_panes(app, terminal_runtimes, ws_idx, tab, &pane_infos, cell_size);
     }
 
     pane_infos
@@ -738,7 +804,8 @@ fn render_pane_border_titles(
     let buf = frame.buffer_mut();
     let area = buf.area;
     for info in pane_infos {
-        if !info.borders.contains(Borders::TOP) || info.rect.width <= 4 {
+        // The client draws a tab strip on a stacked tile's top row instead.
+        if info.stacked || !info.borders.contains(Borders::TOP) || info.rect.width <= 4 {
             continue;
         }
         let Some(title) = ws
@@ -1029,6 +1096,7 @@ mod tests {
             scrollbar_rect: None,
             borders: Borders::ALL,
             is_focused: false,
+            stacked: false,
         }];
 
         let terminal_id = ws.tabs[0].panes[&pane_id].attached_terminal_id.clone();
@@ -1201,6 +1269,32 @@ mod tests {
         assert_eq!(no_outer_infos[0].borders, Borders::NONE);
     }
 
+    /// Business rule: a tile with tabs always keeps a top row for its tab
+    /// strip, whatever the border settings, or its hidden tabs are unreachable
+    /// by mouse and invisible.
+    #[test]
+    fn tile_with_tabs_keeps_its_top_row_under_every_border_setting() {
+        let mut workspace = Workspace::test_new("test");
+        let layout = &mut workspace.tabs[0].layout;
+        let stack = layout.stack_of(layout.focused()).unwrap().id();
+        layout.add_to_stack(stack, None, false);
+        let area = Rect::new(0, 0, 100, 20);
+
+        for borders in [
+            PaneBordersConfig::Auto,
+            PaneBordersConfig::Always,
+            PaneBordersConfig::Off,
+        ] {
+            for outer in [true, false] {
+                let infos = apply_pane_chrome(layout.panes(area), borders, false, outer);
+                assert!(
+                    infos[0].borders.contains(Borders::TOP),
+                    "{borders:?} outer={outer}"
+                );
+            }
+        }
+    }
+
     #[test]
     fn global_pane_border_renderer_composes_junctions_and_focus_style() {
         let mut app = AppState::test_new();
@@ -1213,6 +1307,7 @@ mod tests {
                 scrollbar_rect: None,
                 borders: Borders::TOP | Borders::LEFT,
                 is_focused: true,
+                stacked: false,
             },
             PaneInfo {
                 id: PaneId::from_raw(2),
@@ -1221,6 +1316,7 @@ mod tests {
                 scrollbar_rect: None,
                 borders: Borders::TOP | Borders::LEFT | Borders::RIGHT,
                 is_focused: false,
+                stacked: false,
             },
             PaneInfo {
                 id: PaneId::from_raw(3),
@@ -1229,6 +1325,7 @@ mod tests {
                 scrollbar_rect: None,
                 borders: Borders::TOP | Borders::LEFT | Borders::BOTTOM,
                 is_focused: false,
+                stacked: false,
             },
             PaneInfo {
                 id: PaneId::from_raw(4),
@@ -1237,6 +1334,7 @@ mod tests {
                 scrollbar_rect: None,
                 borders: Borders::ALL,
                 is_focused: false,
+                stacked: false,
             },
         ];
         let split_borders = vec![
@@ -1283,6 +1381,7 @@ mod tests {
                 scrollbar_rect: None,
                 borders: Borders::ALL,
                 is_focused: true,
+                stacked: false,
             },
             PaneInfo {
                 id: PaneId::from_raw(2),
@@ -1291,6 +1390,7 @@ mod tests {
                 scrollbar_rect: None,
                 borders: Borders::ALL,
                 is_focused: false,
+                stacked: false,
             },
         ];
         let ws = Workspace::test_new("test");

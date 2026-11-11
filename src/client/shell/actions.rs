@@ -863,8 +863,9 @@ impl ClientShellState {
     ) -> Option<crate::api::schema::Method> {
         use crate::api::schema::{
             Method, PaneDirection, PaneFocusDirectionParams, PaneResizeParams, PaneSplitParams,
-            PaneSwapParams, PaneTarget, PaneZoomMode, PaneZoomParams, SplitDirection,
-            TabCreateParams, TabMoveParams, TabTarget, WorkspaceTarget,
+            PaneStackAddParams, PaneStackMoveParams, PaneSwapParams, PaneTarget, PaneZoomMode,
+            PaneZoomParams, SplitDirection, TabCreateParams, TabMoveParams, TabTarget,
+            WorkspaceTarget,
         };
         use crate::input::KeybindAction;
 
@@ -1026,6 +1027,44 @@ impl ClientShellState {
                     env: Default::default(),
                 }))
             }
+            KeybindAction::NewStackPane => Some(Method::PaneStackAdd(PaneStackAddParams {
+                pane_id: focused_pane?,
+                cwd: None,
+                focus: true,
+            })),
+            KeybindAction::PreviousStackPane | KeybindAction::NextStackPane => {
+                let (tabs, current) = focused_stack_panes(snapshot)?;
+                let delta = if action == KeybindAction::PreviousStackPane {
+                    tabs.len() - 1
+                } else {
+                    1
+                };
+                Some(Method::PaneFocus(PaneTarget {
+                    pane_id: tabs[(current + delta) % tabs.len()].clone(),
+                }))
+            }
+            KeybindAction::SwitchStackPane(index) => {
+                let (tabs, _) = focused_stack_panes(snapshot)?;
+                Some(Method::PaneFocus(PaneTarget {
+                    pane_id: tabs.get(index)?.clone(),
+                }))
+            }
+            KeybindAction::MoveStackPanePrevious | KeybindAction::MoveStackPaneNext => {
+                let (tabs, current) = focused_stack_panes(snapshot)?;
+                if tabs.len() <= 1 {
+                    return None;
+                }
+                let delta = if action == KeybindAction::MoveStackPanePrevious {
+                    tabs.len() - 1
+                } else {
+                    1
+                };
+                Some(Method::PaneStackMove(PaneStackMoveParams {
+                    pane_id: tabs[current].clone(),
+                    target_pane_id: None,
+                    index: (current + delta) % tabs.len(),
+                }))
+            }
             KeybindAction::FocusPaneLeft
             | KeybindAction::FocusPaneDown
             | KeybindAction::FocusPaneUp
@@ -1065,7 +1104,7 @@ impl ClientShellState {
                 let panes = snapshot
                     .panes
                     .iter()
-                    .filter(|pane| pane.tab_id == focused_tab)
+                    .filter(|pane| pane.tab_id == focused_tab && !pane.hidden)
                     .collect::<Vec<_>>();
                 if panes.is_empty() {
                     return None;
@@ -1116,4 +1155,24 @@ impl ClientShellState {
             _ => None,
         }
     }
+}
+
+/// The focused tile's tabs in order, and the position of the shown one.
+fn focused_stack_panes(
+    snapshot: &crate::protocol::ClientShellSnapshot,
+) -> Option<(Vec<String>, usize)> {
+    let focused_pane_id = snapshot.focused_pane_id.as_deref()?;
+    let focused = snapshot
+        .panes
+        .iter()
+        .find(|pane| pane.pane_id == focused_pane_id)?;
+    let stack_id = focused.stack_id.as_deref()?;
+    let tabs: Vec<String> = snapshot
+        .panes
+        .iter()
+        .filter(|pane| pane.stack_id.as_deref() == Some(stack_id))
+        .map(|pane| pane.pane_id.clone())
+        .collect();
+    let current = tabs.iter().position(|pane_id| pane_id == focused_pane_id)?;
+    Some((tabs, current))
 }

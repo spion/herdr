@@ -161,6 +161,32 @@ pub(crate) fn keybind_help_groups(
             ],
         ),
         (
+            "stack",
+            vec![
+                entry(binding_label(&keybinds.new_stack_pane), "new pane in stack"),
+                entry(
+                    binding_label(&keybinds.previous_stack_pane),
+                    "previous pane in stack",
+                ),
+                entry(
+                    binding_label(&keybinds.next_stack_pane),
+                    "next pane in stack",
+                ),
+                entry(
+                    binding_label(&keybinds.move_stack_pane_previous),
+                    "move pane left in stack",
+                ),
+                entry(
+                    binding_label(&keybinds.move_stack_pane_next),
+                    "move pane right in stack",
+                ),
+                entry(
+                    indexed_label(&keybinds.switch_stack_pane),
+                    "switch to stack pane 1-9",
+                ),
+            ],
+        ),
+        (
             "panes",
             vec![
                 entry(binding_label(&keybinds.split_vertical), "split vertical"),

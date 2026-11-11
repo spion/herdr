@@ -387,25 +387,37 @@ pub struct KeysConfig {
     pub focus_agent: BindingConfig,
     /// Local-client shortcut that sends a clipboard image to a remote Herdr session. Default: "ctrl+v".
     pub remote_image_paste: String,
-    /// Create a new tab in the active workspace. Default: "prefix+c"
+    /// Create a new workspace tab in the active workspace. Unset by default.
     pub new_tab: BindingConfig,
-    /// Rename the active tab. Default: "prefix+shift+t".
+    /// Rename the active workspace tab. Unset by default.
     pub rename_tab: BindingConfig,
-    /// Select the previous tab. Default: "prefix+p".
+    /// Select the previous workspace tab. Unset by default.
     pub previous_tab: BindingConfig,
-    /// Select the next tab. Default: "prefix+n".
+    /// Select the next workspace tab. Unset by default.
     pub next_tab: BindingConfig,
     /// Move the active tab one position toward the front. Unset by default.
     pub move_tab_previous: BindingConfig,
     /// Move the active tab one position toward the back. Unset by default.
     pub move_tab_next: BindingConfig,
-    /// Switch to tab 1-9. Default: "prefix+1..9".
+    /// Switch to workspace tab 1-9. Unset by default.
     pub switch_tab: BindingConfig,
     /// Switch to workspace 1-9 from prefix mode. Unset by default.
     pub switch_workspace: BindingConfig,
-    /// Close the active tab. Default: "prefix+shift+x".
+    /// Close the active workspace tab. Unset by default.
     pub close_tab: BindingConfig,
-    /// Rename the focused pane. Default: "prefix+shift+p".
+    /// Open a new pane in the focused stack. Default: "prefix+c".
+    pub new_stack_pane: BindingConfig,
+    /// Show the previous pane of the focused stack. Default: "prefix+p".
+    pub previous_stack_pane: BindingConfig,
+    /// Show the next pane of the focused stack. Default: "prefix+n".
+    pub next_stack_pane: BindingConfig,
+    /// Move the focused pane one position in its stack, toward the front. Unset by default.
+    pub move_stack_pane_previous: BindingConfig,
+    /// Move the focused pane one position in its stack, toward the back. Unset by default.
+    pub move_stack_pane_next: BindingConfig,
+    /// Show pane 1-9 of the focused stack. Default: "prefix+1..9".
+    pub switch_stack_pane: BindingConfig,
+    /// Rename the focused pane. Default: ["prefix+shift+p", "prefix+shift+t"].
     pub rename_pane: BindingConfig,
     /// Open the focused pane scrollback in $EDITOR. Default: "prefix+e".
     pub edit_scrollback: BindingConfig,
@@ -438,7 +450,7 @@ pub struct KeysConfig {
     pub split_vertical: BindingConfig,
     /// Split pane horizontally (stacked). Default: "prefix+minus"
     pub split_horizontal: BindingConfig,
-    /// Close the focused pane. Default: "prefix+x"
+    /// Close the focused pane. Default: ["prefix+x", "prefix+shift+x"].
     pub close_pane: BindingConfig,
     /// Toggle zoom for the focused pane. Default: "prefix+z"
     #[serde(alias = "fullscreen")]
@@ -542,6 +554,18 @@ pub(crate) struct KeysConfigOverlay {
     switch_workspace: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     close_tab: Option<BindingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    new_stack_pane: Option<BindingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    previous_stack_pane: Option<BindingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    next_stack_pane: Option<BindingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    move_stack_pane_previous: Option<BindingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    move_stack_pane_next: Option<BindingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    switch_stack_pane: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     rename_pane: Option<BindingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -678,6 +702,12 @@ impl<'de> Deserialize<'de> for KeysConfig {
         apply_field!(switch_tab);
         apply_field!(switch_workspace);
         apply_field!(close_tab);
+        apply_field!(new_stack_pane);
+        apply_field!(previous_stack_pane);
+        apply_field!(next_stack_pane);
+        apply_field!(move_stack_pane_previous);
+        apply_field!(move_stack_pane_next);
+        apply_field!(switch_stack_pane);
         apply_field!(rename_pane);
         apply_field!(edit_scrollback);
         apply_field!(clear_pane);
@@ -783,6 +813,12 @@ impl KeysConfig {
         copy_effective_indexed_field!(switch_tab, keybinds.switch_tab);
         copy_effective_indexed_field!(switch_workspace, keybinds.switch_workspace);
         copy_effective_action_field!(close_tab, keybinds.close_tab);
+        copy_effective_action_field!(new_stack_pane, keybinds.new_stack_pane);
+        copy_effective_action_field!(previous_stack_pane, keybinds.previous_stack_pane);
+        copy_effective_action_field!(next_stack_pane, keybinds.next_stack_pane);
+        copy_effective_action_field!(move_stack_pane_previous, keybinds.move_stack_pane_previous);
+        copy_effective_action_field!(move_stack_pane_next, keybinds.move_stack_pane_next);
+        copy_effective_indexed_field!(switch_stack_pane, keybinds.switch_stack_pane);
         copy_effective_action_field!(rename_pane, keybinds.rename_pane);
         copy_effective_action_field!(edit_scrollback, keybinds.edit_scrollback);
         copy_effective_action_field!(clear_pane, keybinds.clear_pane);
@@ -980,7 +1016,7 @@ pub struct UiConfig {
     pub pane_gaps: bool,
     /// Show agent labels in split pane borders when no manual pane label is set. Default: false.
     pub show_agent_labels_on_pane_borders: bool,
-    /// Hide the tab row when the workspace has one tab. Default: false.
+    /// Hide the tab row when the workspace has one tab. Default: true.
     pub hide_tab_bar_when_single_tab: bool,
     /// Desktop tab row placement. Default: top.
     pub tab_bar_position: TabBarPositionConfig,
@@ -1146,16 +1182,25 @@ impl Default for KeysConfig {
             next_agent: BindingConfig::empty(),
             focus_agent: BindingConfig::empty(),
             remote_image_paste: "ctrl+v".into(),
-            new_tab: BindingConfig::one("prefix+c"),
-            rename_tab: BindingConfig::one("prefix+shift+t"),
-            previous_tab: BindingConfig::one("prefix+p"),
-            next_tab: BindingConfig::one("prefix+n"),
+            new_tab: BindingConfig::empty(),
+            rename_tab: BindingConfig::empty(),
+            previous_tab: BindingConfig::empty(),
+            next_tab: BindingConfig::empty(),
             move_tab_previous: BindingConfig::empty(),
             move_tab_next: BindingConfig::empty(),
-            switch_tab: BindingConfig::one("prefix+1..9"),
+            switch_tab: BindingConfig::empty(),
             switch_workspace: BindingConfig::empty(),
-            close_tab: BindingConfig::one("prefix+shift+x"),
-            rename_pane: BindingConfig::one("prefix+shift+p"),
+            close_tab: BindingConfig::empty(),
+            new_stack_pane: BindingConfig::one("prefix+c"),
+            previous_stack_pane: BindingConfig::one("prefix+p"),
+            next_stack_pane: BindingConfig::one("prefix+n"),
+            move_stack_pane_previous: BindingConfig::empty(),
+            move_stack_pane_next: BindingConfig::empty(),
+            switch_stack_pane: BindingConfig::one("prefix+1..9"),
+            rename_pane: BindingConfig::Many(vec![
+                "prefix+shift+p".into(),
+                "prefix+shift+t".into(),
+            ]),
             edit_scrollback: BindingConfig::one("prefix+e"),
             clear_pane: BindingConfig::default(),
             copy_mode: BindingConfig::one("prefix+["),
@@ -1172,7 +1217,7 @@ impl Default for KeysConfig {
             last_pane: BindingConfig::empty(),
             split_vertical: BindingConfig::one("prefix+v"),
             split_horizontal: BindingConfig::one("prefix+minus"),
-            close_pane: BindingConfig::one("prefix+x"),
+            close_pane: BindingConfig::Many(vec!["prefix+x".into(), "prefix+shift+x".into()]),
             zoom: BindingConfig::one("prefix+z"),
             resize_mode: BindingConfig::one("prefix+r"),
             resize_pane_left: BindingConfig::empty(),
@@ -1218,7 +1263,7 @@ impl Default for UiConfig {
             pane_scrollbars: true,
             pane_gaps: true,
             show_agent_labels_on_pane_borders: false,
-            hide_tab_bar_when_single_tab: false,
+            hide_tab_bar_when_single_tab: true,
             tab_bar_position: TabBarPositionConfig::Top,
             tab_bar_right: Vec::new(),
             tab_bar_right_separator: " ".into(),
@@ -1525,7 +1570,7 @@ status_indicators = "symbols"
         assert!(default_config.ui.pane_scrollbars);
         assert!(default_config.ui.pane_gaps);
         assert!(!default_config.ui.show_agent_labels_on_pane_borders);
-        assert!(!default_config.ui.hide_tab_bar_when_single_tab);
+        assert!(default_config.ui.hide_tab_bar_when_single_tab);
         assert_eq!(
             default_config.ui.tab_bar_position,
             TabBarPositionConfig::Top
@@ -1540,7 +1585,7 @@ pane_outer_borders = false
 pane_scrollbars = false
 pane_gaps = true
 show_agent_labels_on_pane_borders = true
-hide_tab_bar_when_single_tab = true
+hide_tab_bar_when_single_tab = false
 tab_bar_position = "bottom"
 tab_bar_right = [
   { type = "zoom" },
@@ -1557,7 +1602,7 @@ tab_bar_right_separator = " · "
         assert!(!config.ui.pane_scrollbars);
         assert!(config.ui.pane_gaps);
         assert!(config.ui.show_agent_labels_on_pane_borders);
-        assert!(config.ui.hide_tab_bar_when_single_tab);
+        assert!(!config.ui.hide_tab_bar_when_single_tab);
         assert_eq!(config.ui.tab_bar_position, TabBarPositionConfig::Bottom);
         assert_eq!(config.ui.tab_bar_right.len(), 5);
         assert!(matches!(

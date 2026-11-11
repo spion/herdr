@@ -308,8 +308,14 @@ impl ClientShellState {
         else {
             return false;
         };
+        let pane_hidden = event.pane_id.as_deref().is_some_and(|pane_id| {
+            snapshot
+                .panes
+                .iter()
+                .any(|pane| pane.pane_id == pane_id && pane.hidden)
+        });
         if let Some(tab_id) = event.tab_id.as_deref() {
-            return snapshot.focused_tab_id.as_deref() == Some(tab_id);
+            return snapshot.focused_tab_id.as_deref() == Some(tab_id) && !pane_hidden;
         }
         event.workspace_id.as_deref().is_some_and(|workspace_id| {
             snapshot.focused_workspace_id.as_deref() == Some(workspace_id)

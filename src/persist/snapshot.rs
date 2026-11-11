@@ -138,6 +138,10 @@ pub struct PaneHistorySnapshot {
 #[derive(Serialize, Deserialize)]
 pub enum LayoutSnapshot {
     Pane(u32),
+    Stack {
+        panes: Vec<u32>,
+        active: usize,
+    },
     Split {
         direction: DirectionSnapshot,
         ratio: f32,
@@ -253,6 +257,7 @@ fn legacy_identity_cwd(snap: &LegacyWorkspaceSnapshot) -> PathBuf {
 fn first_pane_id_in_layout(layout: &LayoutSnapshot) -> Option<u32> {
     match layout {
         LayoutSnapshot::Pane(id) => Some(*id),
+        LayoutSnapshot::Stack { panes, .. } => panes.first().copied(),
         LayoutSnapshot::Split { first, second, .. } => {
             first_pane_id_in_layout(first).or_else(|| first_pane_id_in_layout(second))
         }
@@ -463,7 +468,13 @@ fn capture_pane_history(
 
 pub(super) fn capture_node(node: &Node) -> LayoutSnapshot {
     match node {
-        Node::Pane(id) => LayoutSnapshot::Pane(id.raw()),
+        Node::Stack(stack) => match stack.panes() {
+            [id] => LayoutSnapshot::Pane(id.raw()),
+            panes => LayoutSnapshot::Stack {
+                panes: panes.iter().map(|id| id.raw()).collect(),
+                active: stack.active_index(),
+            },
+        },
         Node::Split {
             direction,
             ratio,
@@ -590,7 +601,7 @@ mod tests {
     fn root_split_ratio(tab: &TabSnapshot) -> Option<f32> {
         match &tab.layout {
             LayoutSnapshot::Split { ratio, .. } => Some(*ratio),
-            LayoutSnapshot::Pane(_) => None,
+            LayoutSnapshot::Pane(_) | LayoutSnapshot::Stack { .. } => None,
         }
     }
 

@@ -799,6 +799,10 @@
                 "null"
               ]
             },
+            "hidden": {
+              "description": "Behind another pane of its stack.",
+              "type": "boolean"
+            },
             "label": {
               "type": [
                 "string",
@@ -827,6 +831,13 @@
                 {
                   "type": "null"
                 }
+              ]
+            },
+            "stack_id": {
+              "description": "Stack holding this pane, valid until the server restarts. Panes sharing a\nstack share a tile, and pane lists give them in stack order.",
+              "type": [
+                "string",
+                "null"
               ]
             },
             "state_labels": {
@@ -2249,6 +2260,12 @@
           "oneOf": [
             {
               "properties": {
+                "active": {
+                  "description": "The pane the tile shows: 0 for `pane`, then `stack` in order.",
+                  "format": "uint",
+                  "minimum": 0,
+                  "type": "integer"
+                },
                 "command": {
                   "items": {
                     "type": "string"
@@ -2281,6 +2298,13 @@
                     "string",
                     "null"
                   ]
+                },
+                "stack": {
+                  "description": "The stack's other panes, in order after `pane`.",
+                  "items": {
+                    "$ref": "#/schemas/request/$defs/LayoutPane"
+                  },
+                  "type": "array"
                 },
                 "type": {
                   "const": "pane",
@@ -2322,6 +2346,44 @@
               "type": "object"
             }
           ]
+        },
+        "LayoutPane": {
+          "properties": {
+            "command": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "cwd": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "env": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "pane_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
         },
         "LayoutSetSplitRatioParams": {
           "properties": {
@@ -2548,6 +2610,44 @@
             "cursor",
             "content_revision"
           ],
+          "type": "object"
+        },
+        "PaneCreateParams": {
+          "description": "Open a shell pane beside `target_pane_id` without covering it: in the stack\nof the neighbouring tile focused last, else of the nearest tile toward\n`direction` (right by default), else in a new tile split off that way.\nThe new pane is shown unless its tile holds focus.",
+          "properties": {
+            "cwd": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "direction": {
+              "anyOf": [
+                {
+                  "$ref": "#/schemas/request/$defs/SplitDirection"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "env": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "focus": {
+              "default": false,
+              "type": "boolean"
+            },
+            "target_pane_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
           "type": "object"
         },
         "PaneCurrentParams": {
@@ -3259,6 +3359,74 @@
           },
           "required": [
             "direction"
+          ],
+          "type": "object"
+        },
+        "PaneStackAddParams": {
+          "description": "Open a shell pane in the stack holding `pane_id`.",
+          "properties": {
+            "cwd": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "focus": {
+              "default": false,
+              "type": "boolean"
+            },
+            "pane_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "pane_id"
+          ],
+          "type": "object"
+        },
+        "PaneStackMoveParams": {
+          "description": "Move a pane to `index` in the stack holding `target_pane_id`, or within its\nown stack when that is omitted. A pane moved to another stack is focused.",
+          "properties": {
+            "index": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "pane_id": {
+              "type": "string"
+            },
+            "target_pane_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "pane_id",
+            "index"
+          ],
+          "type": "object"
+        },
+        "PaneStackSplitParams": {
+          "description": "Move a pane into a new tile on `side` of the tile holding `target_pane_id`,\nor of its own tile when that is omitted, and focus it.",
+          "properties": {
+            "pane_id": {
+              "type": "string"
+            },
+            "side": {
+              "$ref": "#/schemas/request/$defs/PaneDirection"
+            },
+            "target_pane_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "pane_id",
+            "side"
           ],
           "type": "object"
         },
@@ -6312,6 +6480,70 @@
             "params"
           ],
           "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "pane.stack_add",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/PaneStackAddParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "pane.stack_move",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/PaneStackMoveParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "pane.create",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/PaneCreateParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "pane.stack_split",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/PaneStackSplitParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
         }
       ],
       "properties": {
@@ -7700,6 +7932,12 @@
           "oneOf": [
             {
               "properties": {
+                "active": {
+                  "description": "The pane the tile shows: 0 for `pane`, then `stack` in order.",
+                  "format": "uint",
+                  "minimum": 0,
+                  "type": "integer"
+                },
                 "command": {
                   "items": {
                     "type": "string"
@@ -7732,6 +7970,13 @@
                     "string",
                     "null"
                   ]
+                },
+                "stack": {
+                  "description": "The stack's other panes, in order after `pane`.",
+                  "items": {
+                    "$ref": "#/schemas/success_response/$defs/LayoutPane"
+                  },
+                  "type": "array"
                 },
                 "type": {
                   "const": "pane",
@@ -7773,6 +8018,44 @@
               "type": "object"
             }
           ]
+        },
+        "LayoutPane": {
+          "properties": {
+            "command": {
+              "items": {
+                "type": "string"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
+            "cwd": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "env": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "pane_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
         },
         "NotificationShowReason": {
           "enum": [
@@ -7907,6 +8190,10 @@
                 "null"
               ]
             },
+            "hidden": {
+              "description": "Behind another pane of its stack.",
+              "type": "boolean"
+            },
             "label": {
               "type": [
                 "string",
@@ -7935,6 +8222,13 @@
                 {
                   "type": "null"
                 }
+              ]
+            },
+            "stack_id": {
+              "description": "Stack holding this pane, valid until the server restarts. Panes sharing a\nstack share a tile, and pane lists give them in stack order.",
+              "type": [
+                "string",
+                "null"
               ]
             },
             "state_labels": {

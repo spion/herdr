@@ -640,26 +640,26 @@
         {
           "key": "keys.new_tab",
           "type": "keybinding",
-          "default": "\"prefix+c\"",
-          "description": "Create a new tab in the active workspace."
+          "default": "unset",
+          "description": "Create a new workspace tab in the active workspace. Unset by default."
         },
         {
           "key": "keys.rename_tab",
           "type": "keybinding",
-          "default": "\"prefix+shift+t\"",
-          "description": "Rename the active tab."
+          "default": "unset",
+          "description": "Rename the active workspace tab. Unset by default."
         },
         {
           "key": "keys.previous_tab",
           "type": "keybinding",
-          "default": "\"prefix+p\"",
-          "description": "Select the previous tab."
+          "default": "unset",
+          "description": "Select the previous workspace tab. Unset by default."
         },
         {
           "key": "keys.next_tab",
           "type": "keybinding",
-          "default": "\"prefix+n\"",
-          "description": "Select the next tab."
+          "default": "unset",
+          "description": "Select the next workspace tab. Unset by default."
         },
         {
           "key": "keys.move_tab_previous",
@@ -676,8 +676,8 @@
         {
           "key": "keys.switch_tab",
           "type": "keybinding",
-          "default": "\"prefix+1..9\"",
-          "description": "Switch to tab 1-9."
+          "default": "unset",
+          "description": "Switch to workspace tab 1-9. Unset by default."
         },
         {
           "key": "keys.switch_workspace",
@@ -688,13 +688,49 @@
         {
           "key": "keys.close_tab",
           "type": "keybinding",
-          "default": "\"prefix+shift+x\"",
-          "description": "Close the active tab."
+          "default": "unset",
+          "description": "Close the active workspace tab. Unset by default."
+        },
+        {
+          "key": "keys.new_stack_pane",
+          "type": "keybinding",
+          "default": "\"prefix+c\"",
+          "description": "Open a new pane in the focused stack."
+        },
+        {
+          "key": "keys.previous_stack_pane",
+          "type": "keybinding",
+          "default": "\"prefix+p\"",
+          "description": "Show the previous pane of the focused stack."
+        },
+        {
+          "key": "keys.next_stack_pane",
+          "type": "keybinding",
+          "default": "\"prefix+n\"",
+          "description": "Show the next pane of the focused stack."
+        },
+        {
+          "key": "keys.move_stack_pane_previous",
+          "type": "keybinding",
+          "default": "unset",
+          "description": "Move the focused pane one position in its stack, toward the front. Unset by default."
+        },
+        {
+          "key": "keys.move_stack_pane_next",
+          "type": "keybinding",
+          "default": "unset",
+          "description": "Move the focused pane one position in its stack, toward the back. Unset by default."
+        },
+        {
+          "key": "keys.switch_stack_pane",
+          "type": "keybinding",
+          "default": "\"prefix+1..9\"",
+          "description": "Show pane 1-9 of the focused stack."
         },
         {
           "key": "keys.rename_pane",
           "type": "keybinding",
-          "default": "\"prefix+shift+p\"",
+          "default": "[\"prefix+shift+p\", \"prefix+shift+t\"]",
           "description": "Rename the focused pane."
         },
         {
@@ -796,7 +832,7 @@
         {
           "key": "keys.close_pane",
           "type": "keybinding",
-          "default": "\"prefix+x\"",
+          "default": "[\"prefix+x\", \"prefix+shift+x\"]",
           "description": "Close the focused pane."
         },
         {
@@ -1002,7 +1038,7 @@
         {
           "key": "ui.hide_tab_bar_when_single_tab",
           "type": "boolean",
-          "default": "false",
+          "default": "true",
           "description": "Hide the tab row when the workspace has one tab."
         },
         {

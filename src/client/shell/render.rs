@@ -4,6 +4,8 @@ use super::*;
 mod overlays;
 #[path = "../shell/sidebar.rs"]
 pub(in crate::client::shell) mod sidebar;
+#[path = "../shell/stack_strip.rs"]
+pub(in crate::client::shell) mod stack_strip;
 #[path = "../shell/tabs.rs"]
 mod tabs;
 

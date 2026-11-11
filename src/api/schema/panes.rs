@@ -40,6 +40,60 @@ crate::cli::projection::cli_params! {
 }
 
 crate::cli::projection::cli_params! {
+    /// Open a shell pane in the stack holding `pane_id`.
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+    pub struct PaneStackAddParams => PaneStackAddProjection {
+        pub pane_id: String => binding::input_target(),
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub cwd: Option<String> => Field::new(None).input(binding::optional_text("cwd", "PATH").path()),
+        #[serde(default)]
+        pub focus: bool => Field::new(false).input(binding::boolean("focus", true)).input(binding::boolean("no-focus", false)),
+    }
+}
+
+crate::cli::projection::cli_params! {
+    /// Move a pane to `index` in the stack holding `target_pane_id`, or within its
+    /// own stack when that is omitted. A pane moved to another stack is focused.
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+    pub struct PaneStackMoveParams => PaneStackMoveProjection {
+        pub pane_id: String => binding::input_target(),
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub target_pane_id: Option<String> => Field::new(None).input(binding::to_pane()),
+        pub index: usize => Field::new(0).input(binding::index()),
+    }
+}
+
+/// Move a pane into a new tile on `side` of the tile holding `target_pane_id`,
+/// or of its own tile when that is omitted, and focus it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct PaneStackSplitParams {
+    pub pane_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_pane_id: Option<String>,
+    pub side: PaneDirection,
+}
+
+crate::cli::projection::cli_params! {
+    /// Open a shell pane beside `target_pane_id` without covering it: in the stack
+    /// of the neighbouring tile focused last, else of the nearest tile toward
+    /// `direction` (right by default), else in a new tile split off that way.
+    /// The new pane is shown unless its tile holds focus.
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+    pub struct PaneCreateParams => PaneCreateProjection {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub target_pane_id: Option<String> => binding::target(true),
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub direction: Option<SplitDirection> => Field::new(None).input(binding::optional_split_direction()),
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub cwd: Option<String> => Field::new(None).input(binding::optional_text("cwd", "PATH").path()),
+        #[serde(default)]
+        pub focus: bool => Field::new(false).input(binding::boolean("focus", true)).input(binding::boolean("no-focus", false)),
+        #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+        pub env: HashMap<String, String> => Field::new(HashMap::new()).input(binding::environment()),
+    }
+}
+
+crate::cli::projection::cli_params! {
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
     pub struct PaneInputSetParams => PaneInputProjection {
         pub pane_id: String => binding::input_target(),
@@ -196,12 +250,22 @@ pub struct LayoutDescription {
     pub root: LayoutNode,
 }
 
+fn is_first_in_stack(active: &usize) -> bool {
+    *active == 0
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum LayoutNode {
     Pane {
         #[serde(flatten)]
         pane: LayoutPane,
+        /// The stack's other panes, in order after `pane`.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        stack: Vec<LayoutPane>,
+        /// The pane the tile shows: 0 for `pane`, then `stack` in order.
+        #[serde(default, skip_serializing_if = "is_first_in_stack")]
+        active: usize,
     },
     Split {
         direction: SplitDirection,
@@ -242,13 +306,11 @@ crate::cli::projection::cli_params! {
     }
 }
 
-crate::cli::projection::cli_params! {
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-    pub struct PaneFocusDirectionParams => PaneFocusProjection {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub pane_id: Option<String> => binding::target(false),
-        pub direction: PaneDirection => Field::new(PaneDirection::Left).input(binding::direction()),
-    }
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct PaneFocusDirectionParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pane_id: Option<String>,
+    pub direction: PaneDirection,
 }
 
 crate::cli::projection::cli_params! {
@@ -501,6 +563,13 @@ pub struct PaneInfo {
     pub terminal_id: String,
     pub workspace_id: String,
     pub tab_id: String,
+    /// Stack holding this pane, valid until the server restarts. Panes sharing a
+    /// stack share a tile, and pane lists give them in stack order.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stack_id: Option<String>,
+    /// Behind another pane of its stack.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hidden: bool,
     pub focused: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cwd: Option<String>,

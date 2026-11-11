@@ -67,6 +67,7 @@ fn shell_new_controls_use_the_same_client_action_routes_as_keybinds() {
     let mut config = Config::default();
     config.ui.prompt_new_workspace_name = false;
     config.ui.prompt_new_tab_name = true;
+    config.ui.hide_tab_bar_when_single_tab = false;
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
     state.set_snapshot(Box::new(snapshot()));
     state.set_pane_surface(surface());
@@ -396,11 +397,11 @@ fn prefix_endpoint_action_uses_public_api_with_stable_ids() {
     };
     assert_eq!(boot_id, "boot-1");
     match &request.method {
-        crate::api::schema::Method::TabCreate(params) => {
-            assert_eq!(params.workspace_id.as_deref(), Some("ws_1"));
+        crate::api::schema::Method::PaneStackAdd(params) => {
+            assert_eq!(params.pane_id, "pane_1");
             assert!(params.focus);
         }
-        other => panic!("expected tab.create, got {other:?}"),
+        other => panic!("expected pane.stack_add, got {other:?}"),
     }
     assert!(state.pending_requests.contains_key(&request.id));
 }

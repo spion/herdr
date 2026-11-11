@@ -127,6 +127,33 @@ pub(crate) fn split_direction() -> Input<SplitDirection> {
     .configure(|arg| choices(arg, SPLITS))
 }
 
+pub(crate) fn optional_split_direction() -> Input<Option<SplitDirection>> {
+    Input::value("direction", "DIRECTION", |slot, value| {
+        *slot = Some(parse_choice(SPLITS, "split direction", value)?);
+        Ok(())
+    })
+    .configure(|arg| choices(arg, SPLITS))
+}
+
+pub(crate) fn to_pane() -> Input<Option<String>> {
+    Input::value("to-pane", "ID", |slot, value| {
+        *slot = Some(crate::cli::normalize_pane_id(value));
+        Ok(())
+    })
+    .help("Move into the stack holding this pane")
+}
+
+pub(crate) fn index() -> Input<usize> {
+    Input::value("index", "N", |slot, value| {
+        *slot = value
+            .parse()
+            .map_err(|_| ParseError::Usage(format!("invalid --index: {value}")))?;
+        Ok(())
+    })
+    .required()
+    .help("Position in the stack, starting at 0")
+}
+
 pub(crate) fn finite(name: &'static str) -> Input<Option<f32>> {
     let update: fn(&mut Option<f32>, &str) -> Result<(), ParseError> = if name == "ratio" {
         |slot, value| {
@@ -382,6 +409,16 @@ cli_projection! { pub(crate) PaneTargetProjection for PaneTarget {
     pane_id => Field::new(String::new()).input(pane_id()),
 } }
 
+pub(crate) struct PaneFocusArgs {
+    pub(crate) pane_id: Option<String>,
+    pub(crate) direction: Option<PaneDirection>,
+}
+
+cli_projection! { pub(crate) PaneFocusProjection for PaneFocusArgs {
+    pane_id => target(true),
+    direction => Field::new(None).input(optional_direction()),
+} }
+
 #[derive(Clone, Copy)]
 pub(super) enum Output {
     Json,
@@ -402,7 +439,7 @@ impl Leaf {
     pub(super) fn command(&self) -> Command {
         let command = projection::command(self.name, (self.arguments)()).about(self.about);
         match self.name {
-            "input" => command.group(clap::ArgGroup::new("selector").args(["pane_id", "pane", "current"]).required(true)),
+            "input" | "stack-add" | "stack-move" => command.group(clap::ArgGroup::new("selector").args(["pane_id", "pane", "current"]).required(true)),
             "move" => command.group(clap::ArgGroup::new("destination").args(["tab", "new-tab", "new-workspace"]).required(true)),
             "send-text" => command.after_help("next: herdr pane run <PANE_ID> <COMMAND> sends text and Enter in one call"),
             "send-keys" => command.after_help("Use esc as the canonical Escape key name; escape is also accepted."),
@@ -547,14 +584,14 @@ pub(super) const LEAVES: &[Leaf] = &[
             Ok(Method::PaneEdges(params))
         },
     },
-    leaf!(
-        "focus",
-        "Focus a neighboring pane",
-        "cli:pane:focus",
-        Json,
-        PaneFocusProjection,
-        PaneFocusDirection
-    ),
+    Leaf {
+        name: "focus",
+        about: "Focus a pane, or its neighbor with --direction",
+        id: "cli:pane:focus",
+        output: Output::Json,
+        arguments: PaneFocusProjection::arguments,
+        method: super::focus,
+    },
     leaf!(
         "resize",
         "Resize a pane split",
@@ -603,11 +640,7 @@ pub(super) const LEAVES: &[Leaf] = &[
         arguments: PaneInputProjection::arguments,
         method: |matches| {
             let mut params = PaneInputProjection::from_matches(matches)?;
-            if matches.get_flag("current") {
-                params.pane_id = crate::cli::target::caller_pane_id()
-                    .map(|value| crate::cli::normalize_pane_id(&value))
-                    .ok_or_else(|| ParseError::Usage("--current requires HERDR_PANE_ID".into()))?;
-            }
+            params.pane_id = super::selected_pane(matches, params.pane_id)?;
             Ok(Method::PaneInputSet(params))
         },
     },
@@ -627,6 +660,48 @@ pub(super) const LEAVES: &[Leaf] = &[
                 true,
             )?;
             Ok(Method::PaneSplit(params))
+        },
+    },
+    Leaf {
+        name: "create",
+        about: "Open a pane beside another without covering it",
+        id: "cli:pane:create",
+        output: Output::Json,
+        arguments: PaneCreateProjection::arguments,
+        method: |matches| {
+            let mut params = PaneCreateProjection::from_matches(matches)?;
+            params.target_pane_id = super::caller_target(
+                matches,
+                params.target_pane_id,
+                crate::cli::target::caller_pane_id().as_deref(),
+                true,
+                true,
+            )?;
+            Ok(Method::PaneCreate(params))
+        },
+    },
+    Leaf {
+        name: "stack-add",
+        about: "Add a new pane to a pane's stack",
+        id: "cli:pane:stack-add",
+        output: Output::Json,
+        arguments: PaneStackAddProjection::arguments,
+        method: |matches| {
+            let mut params = PaneStackAddProjection::from_matches(matches)?;
+            params.pane_id = super::selected_pane(matches, params.pane_id)?;
+            Ok(Method::PaneStackAdd(params))
+        },
+    },
+    Leaf {
+        name: "stack-move",
+        about: "Reorder a pane in its stack or move it to another stack",
+        id: "cli:pane:stack-move",
+        output: Output::Json,
+        arguments: PaneStackMoveProjection::arguments,
+        method: |matches| {
+            let mut params = PaneStackMoveProjection::from_matches(matches)?;
+            params.pane_id = super::selected_pane(matches, params.pane_id)?;
+            Ok(Method::PaneStackMove(params))
         },
     },
     Leaf {
